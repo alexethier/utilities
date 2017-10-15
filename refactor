@@ -1,6 +1,7 @@
 #!/bin/python
 import argparse
 import sys
+import fileinput
 
 class Refactor:
 
@@ -25,9 +26,15 @@ class Refactor:
       for first_token in all_find_options[0]:
         for second_token in all_find_options[1]:
           combinations.append(first_token + second_token)
-          combinations.append(first_token + " " + second_token)
-          combinations.append(first_token + "_" + second_token)
-          combinations.append(first_token + "-" + second_token)
+          if second_token != "":
+            combinations.append(first_token + " " + second_token)
+            combinations.append(first_token + "_" + second_token)
+            combinations.append(first_token + "-" + second_token)
+          else:
+            # If dummy variables are used then combining the tokens should not include a separator.
+            combinations.append(first_token + second_token)
+            combinations.append(first_token + second_token)
+            combinations.append(first_token + second_token)
 
       return combinations
 
@@ -47,6 +54,29 @@ class Refactor:
 
     return self.combine(all_combinations)
 
+  def pad_tokens(self, token_list, length):
+    while length > 0:
+      token_list.append("")
+      length = length - 1
+    return token_list
+
+  # Pads the two lists so they are the same length
+  def get_tokens(self, find_tokens, replace_tokens):
+
+    token_object = {}
+
+    difference = len(find_tokens) - len(replace_tokens)
+    if difference > 0:
+      token_object['find_tokens'] = find_tokens
+      token_object['replace_tokens'] = self.pad_tokens(replace_tokens, difference)
+    elif difference < 0:
+      token_object['find_tokens'] = self.pad_tokens(find_tokens, -1 * difference)
+      token_object['replace_tokens'] = replace_tokens
+    else:
+      token_object['find_tokens'] = find_tokens
+      token_object['replace_tokens'] = replace_tokens
+
+    return token_object
 
   def run(self):
 
@@ -57,48 +87,19 @@ class Refactor:
 
     args = parser.parse_args()
 
+    # If there are more replace tokens than find tokens then we have to guess the separator and pattern to use.
+    # Since this is unlikely to choose correctly it is better to just return an error.
     if(len(args.replace) > len(args.find)):
-      print("You must have the same number of find tokens as replace tokens.  Concatenate the replace tokens to reduce the count")
+      sys.stderr.write("The number of replace tokens must not exceed the number of find tokens.  Try concatenating the replace tokens.\n")
       sys.exit(1)
 
-    print("running.")
+    tokens = self.get_tokens(args.find, args.replace)
+    find_tokens = tokens['find_tokens']
+    replace_tokens = tokens['replace_tokens']
 
-    print(args.find)
-    print(args.replace)
-
-#    # Generate all standard token variations
-#    all_find_options = []
-#    for find_token in args.find:
-#      find_token_options = []
-#      find_token_options.append(find_token.lower())
-#      find_token_options.append(find_token.upper())
-#      find_token_options.append(find_token.title())
-#      
-#      all_find_options.append(find_token_options)
-#
-#    find_combinations = self.combine(all_find_options)
-
-    find_combinations = self.computeCombinations(args.find)
-
-    replace_tokens = args.replace[:]
-    count = len(args.find) - len(args.replace)
-    while count > 0:
-      replace_tokens.append("DUMMY")
-      count = count -1
-
+    # Because combinations are computed deterministically both lists will share the same ordering and can easily be mapped together.
+    find_combinations = self.computeCombinations(find_tokens)
     replace_combinations = self.computeCombinations(replace_tokens)
-#    all_replace_options = []
-#    for replace_token in args.replace:
-#      if replace_token == "*":
-#        replace_token == ""
-#      replace_token_options = []
-#      replace_token_options.append(replace_token.lower())
-#      replace_token_options.append(replace_token.upper())
-#      replace_token_options.append(replace_token.title())
-#
-#      all_replace_options.append(replace_token_options)
-#
-#    replace_combinations = self.combine(all_replace_options)
 
     replace_map = {}
     for index in range(len(find_combinations)):
@@ -106,17 +107,30 @@ class Refactor:
       replace_combination = replace_combinations[index]
       replace_map[find_combination] = replace_combination
 
-    print(replace_map)
+    if args.input_file:
+      content = None
+      with open(args.input_file, "r") as input_file:
+        content = input_file.read()
 
-#    matched_combinations = []
-#    with open(args.input_file, "r") as input_file:
-#      content = input_file.read()
+      for key in replace_map:
+        content = content.replace(key, replace_map[key])
+
+      print(content)
+          
+        
+#      matched_combinations = []
+#      with open(args.input_file, "r") as input_file:
+#        content = input_file.read()
+#  
+#        for key in replace_map:
+#          if key in content:
+#            matched_combinations.append("'" + key + "'" + " -> " + "'" + replace_map[key] + "'")
+#            matched_combinations.append("'" + key + "'" + " -> " + "'" + replace_map[key] + "'")
 #
-#      for combination in combinations:
-#        if combination in content:
-#          matched_combinations.append(combination)
-#
-#    print(matched_combinations)
+#      print(matched_combinations)
+    else:
+      sys.stderr.write("Specify the --input_file parameter.  Input from stdin not implemented...yet.")
+      sys.exit(1)
 
 refactor = Refactor();
 refactor.run();
