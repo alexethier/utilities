@@ -1,0 +1,122 @@
+#!/bin/python
+import argparse
+import sys
+
+class Refactor:
+
+  def __init__(self):
+    pass;
+
+  def combine(self, all_find_options):
+
+    # If there are more than two token lists, use recursion to combine all the lists together except the first one.
+    if(len(all_find_options) > 2):
+      current_options = all_find_options[1:]
+      combinations = self.combine(current_options)
+      new_all_find_options = []
+      new_all_find_options.append(all_find_options[0])
+      new_all_find_options.append(combinations)
+
+      return self.combine(new_all_find_options)
+
+    # If there are exactly two token lists combine them in all standard ways
+    elif(len(all_find_options) > 1):
+      combinations = []
+      for first_token in all_find_options[0]:
+        for second_token in all_find_options[1]:
+          combinations.append(first_token + second_token)
+          combinations.append(first_token + " " + second_token)
+          combinations.append(first_token + "_" + second_token)
+          combinations.append(first_token + "-" + second_token)
+
+      return combinations
+
+    else:
+      # If there is one token list there is nothing to do but return it.
+      return all_find_options[0]
+
+  def computeCombinations(self, token_list):
+    all_combinations = []
+    for token in token_list:
+      combination_options = []
+      combination_options.append(token.lower())
+      combination_options.append(token.upper())
+      combination_options.append(token.title())
+
+      all_combinations.append(combination_options)
+
+    return self.combine(all_combinations)
+
+
+  def run(self):
+
+    parser = argparse.ArgumentParser(description="Intelligently refactor text files.")
+    parser.add_argument("-i", "--input_file", help="Path to file to edit.")
+    parser.add_argument("-f", "--find", nargs="*", help="Token to find.", required=True)
+    parser.add_argument("-r", "--replace", nargs="*", help="Token to replace.", required=True)
+
+    args = parser.parse_args()
+
+    if(len(args.replace) > len(args.find)):
+      print("You must have the same number of find tokens as replace tokens.  Concatenate the replace tokens to reduce the count")
+      sys.exit(1)
+
+    print("running.")
+
+    print(args.find)
+    print(args.replace)
+
+#    # Generate all standard token variations
+#    all_find_options = []
+#    for find_token in args.find:
+#      find_token_options = []
+#      find_token_options.append(find_token.lower())
+#      find_token_options.append(find_token.upper())
+#      find_token_options.append(find_token.title())
+#      
+#      all_find_options.append(find_token_options)
+#
+#    find_combinations = self.combine(all_find_options)
+
+    find_combinations = self.computeCombinations(args.find)
+
+    replace_tokens = args.replace[:]
+    count = len(args.find) - len(args.replace)
+    while count > 0:
+      replace_tokens.append("DUMMY")
+      count = count -1
+
+    replace_combinations = self.computeCombinations(replace_tokens)
+#    all_replace_options = []
+#    for replace_token in args.replace:
+#      if replace_token == "*":
+#        replace_token == ""
+#      replace_token_options = []
+#      replace_token_options.append(replace_token.lower())
+#      replace_token_options.append(replace_token.upper())
+#      replace_token_options.append(replace_token.title())
+#
+#      all_replace_options.append(replace_token_options)
+#
+#    replace_combinations = self.combine(all_replace_options)
+
+    replace_map = {}
+    for index in range(len(find_combinations)):
+      find_combination = find_combinations[index]
+      replace_combination = replace_combinations[index]
+      replace_map[find_combination] = replace_combination
+
+    print(replace_map)
+
+#    matched_combinations = []
+#    with open(args.input_file, "r") as input_file:
+#      content = input_file.read()
+#
+#      for combination in combinations:
+#        if combination in content:
+#          matched_combinations.append(combination)
+#
+#    print(matched_combinations)
+
+refactor = Refactor();
+refactor.run();
