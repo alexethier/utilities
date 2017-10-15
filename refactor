@@ -1,7 +1,7 @@
 #!/bin/python
 import argparse
 import sys
-import fileinput
+import pprint
 
 class Refactor:
 
@@ -84,6 +84,7 @@ class Refactor:
     parser.add_argument("-i", "--input_file", help="Path to file to edit.")
     parser.add_argument("-f", "--find", nargs="*", help="Token to find.", required=True)
     parser.add_argument("-r", "--replace", nargs="*", help="Token to replace.", required=True)
+    parser.add_argument("-p", "--plan", action='store_true', default=False, help="The script will not modify any files.  It will show what replacements are planned.")
 
     args = parser.parse_args()
 
@@ -107,30 +108,24 @@ class Refactor:
       replace_combination = replace_combinations[index]
       replace_map[find_combination] = replace_combination
 
+    content = None
     if args.input_file:
-      content = None
       with open(args.input_file, "r") as input_file:
         content = input_file.read()
-
-      for key in replace_map:
-        content = content.replace(key, replace_map[key])
-
-      print(content)
-          
-        
-#      matched_combinations = []
-#      with open(args.input_file, "r") as input_file:
-#        content = input_file.read()
-#  
-#        for key in replace_map:
-#          if key in content:
-#            matched_combinations.append("'" + key + "'" + " -> " + "'" + replace_map[key] + "'")
-#            matched_combinations.append("'" + key + "'" + " -> " + "'" + replace_map[key] + "'")
-#
-#      print(matched_combinations)
     else:
       sys.stderr.write("Specify the --input_file parameter.  Input from stdin not implemented...yet.")
       sys.exit(1)
+
+    if args.plan:
+      for key in replace_map:
+        if key in content:
+          print(key + " -> " + replace_map[key])
+    else:
+      for key in replace_map:
+        content = content.replace(key, replace_map[key])
+
+      with open(args.input_file, "w") as output_file:
+        output_file.write(content)
 
 refactor = Refactor();
 refactor.run();
