@@ -2,6 +2,7 @@
 import argparse
 import sys
 import pprint
+import os.path
 
 class Refactor:
 
@@ -78,17 +79,33 @@ class Refactor:
 
     return token_object
 
+  def refactorFile(self, filepath, replace_map):
+    content = None
+    with open(filepath, "r") as input_file:
+      content = input_file.read()
+
+    for key in replace_map:
+      content = content.replace(key, replace_map[key])
+
+    with open(filepath, "w") as output_file:
+      output_file.write(content)
+
   def run(self):
 
     parser = argparse.ArgumentParser(description="Intelligently refactor text files.")
     parser.add_argument("-i", "--input_file", help="Path to file to edit.")
-    parser.add_argument("-f", "--find", nargs="*", help="Token to find.", required=True)
-    parser.add_argument("-r", "--replace", nargs="*", help="Token to replace.", required=True)
+    parser.add_argument("-a", "--all_files", action='store_true', default=False, help="The script will expect stdin to pass a list of file paths to edit.")
+    parser.add_argument("-f", "--find", nargs="*", help="Ordered list of tokens to find.", required=True)
+    parser.add_argument("-r", "--replace", nargs="*", help="Ordered list of tokens to replace.", required=True)
     parser.add_argument("-p", "--plan", action='store_true', default=False, help="The script will not modify any files.  It will show what replacements are planned.")
 
     args = parser.parse_args()
 
-    # If there are more replace tokens than find tokens then we have to guess the separator and pattern to use.
+    if args.all_files and (args.input_file or args.plan):
+      sys.stderr.write("Invalid combination of input arguments.  --all_files cannot be used with --plan or --input_file.\n")
+      sys.exit(1)
+
+    # If there are more replace tokens than find tokens the code will run but we have to guess the separator and pattern to use.
     # Since this is unlikely to choose correctly it is better to just return an error.
     if(len(args.replace) > len(args.find)):
       sys.stderr.write("The number of replace tokens must not exceed the number of find tokens.  Try concatenating the replace tokens.\n")
@@ -108,24 +125,24 @@ class Refactor:
       replace_combination = replace_combinations[index]
       replace_map[find_combination] = replace_combination
 
-    content = None
-    if args.input_file:
-      with open(args.input_file, "r") as input_file:
-        content = input_file.read()
+    if args.all_files:
+      for line in sys.stdin:
+        filepath = line.rstrip('\n')
+        if os.path.isfile(filepath):
+          self.refactorFile(filepath, replace_map)
+        
     else:
-      sys.stderr.write("Specify the --input_file parameter.  Input from stdin not implemented...yet.")
-      sys.exit(1)
+      if args.plan:
+        content = None
+        if args.input_file:
+          with open(args.input_file, "r") as input_file:
+            content = input_file.read()
 
-    if args.plan:
-      for key in replace_map:
-        if key in content:
-          print(key + " -> " + replace_map[key])
-    else:
-      for key in replace_map:
-        content = content.replace(key, replace_map[key])
-
-      with open(args.input_file, "w") as output_file:
-        output_file.write(content)
+        for key in replace_map:
+          if key in content:
+            print(key + " -> " + replace_map[key])
+      else:
+        self.refactorFile(args.input_file, replace_map)
 
 refactor = Refactor();
 refactor.run();
