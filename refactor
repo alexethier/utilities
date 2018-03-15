@@ -4,6 +4,7 @@ import sys
 import pprint
 import os
 import os.path
+from stat import S_ISFIFO
 
 class Refactor:
 
@@ -102,7 +103,6 @@ class Refactor:
   def renameFile(self, filepath, replace_map, plan=False):
 
     # Given a path only rename the basename
-    if os.path.exists(filepath) and filepath != ".":
       dirname = os.path.dirname(filepath)
       basename = os.path.basename(filepath)
   
@@ -116,21 +116,21 @@ class Refactor:
         else:
           os.rename(filepath, newpath)
 
+  def check_path(self, filepath):
+    fullpath = os.path.abspath(filepath.rstrip('\n'))
+    if os.path.exists(fullpath) and filepath != ".":
+      return fullpath
+
   def run(self):
 
     parser = argparse.ArgumentParser(description="Intelligently refactor text files.")
     parser.add_argument("-i", "--input_file", nargs="*", help="Path to file to edit.")
-    parser.add_argument("-a", "--all_files", action='store_true', default=False, help="The script will expect stdin to pass a list of file paths to edit.")
     parser.add_argument("-f", "--find", nargs="*", help="Ordered list of tokens to find.", required=True)
     parser.add_argument("-r", "--replace", nargs="*", help="Ordered list of tokens to replace.", required=True)
     parser.add_argument("-p", "--plan", action='store_true', default=False, help="The script will not modify any files.  It will show what replacements are planned.")
     parser.add_argument("-n", "--rename", action='store_true', default=False, help="Sets --all_files option to true and in addition will rename files and directories using the same replacement strategy.")
 
     args = parser.parse_args()
-
-    all_files = args.all_files
-    if args.rename:
-      all_files = True
 
     # If there are more replace tokens than find tokens the code will run but we have to guess the separator and pattern to use.
     # Since this is unlikely to choose correctly it is better to just return an error.
@@ -156,15 +156,24 @@ class Refactor:
     all_changed_keys = {}
     all_changed_filepaths = {}
 
-    filepaths = []
-    if all_files:
+    input_filepaths = []
+    if S_ISFIFO(os.fstat(0).st_mode):
       for line in sys.stdin:
-        fullpath = os.path.abspath(line.rstrip('\n'))
-        filepaths.append(fullpath)
-
+        input_filepaths.append(line)
     if args.input_file != None:
       for filepath in args.input_file:
-        filepath.append(filepath)
+        input_filepaths.append(filepath)
+
+    filepaths = []
+    for input_filepath in input_filepaths:
+      fullpath = self.check_path(input_filepath)
+      if fullpath != None:
+        filepaths.append(fullpath)
+
+    # If we rename files and directories we need to rename the bottom most files first
+    # So get the full paths of the files and sort by length
+    # This won't work with wonky inputs (weird relative paths or symlinks) but should work 99% of the time
+    filepaths.sort(lambda x,y: cmp(len(y), len(x)))
 
     for filepath in filepaths:
       if os.path.isfile(filepath):
