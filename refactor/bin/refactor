@@ -124,11 +124,11 @@ class Refactor:
   def run(self):
 
     parser = argparse.ArgumentParser(description="Intelligently refactor text files.")
-    parser.add_argument("-i", "--input_file", nargs="*", help="Path to file to edit.")
+    parser.add_argument("-i", "--input_file", nargs="*", help="Path to file(s) to edit.")
     parser.add_argument("-f", "--find", nargs="*", help="Ordered list of tokens to find.", required=True)
     parser.add_argument("-r", "--replace", nargs="*", help="Ordered list of tokens to replace.", required=True)
     parser.add_argument("-p", "--plan", action='store_true', default=False, help="The script will not modify any files.  It will show what replacements are planned.")
-    parser.add_argument("-n", "--rename", action='store_true', default=False, help="Sets --all_files option to true and in addition will rename files and directories using the same replacement strategy.")
+    parser.add_argument("-n", "--rename", action='store_true', default=False, help="Renames files and directories using the same replacement strategy.")
 
     args = parser.parse_args()
 
