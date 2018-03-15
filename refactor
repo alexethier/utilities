@@ -80,31 +80,46 @@ class Refactor:
 
     return token_object
 
-  def refactorFile(self, filepath, replace_map):
+  def refactorFile(self, filepath, replace_map, plan=False):
     content = None
     with open(filepath, "r") as input_file:
       content = input_file.read()
 
-    for key in replace_map:
-      content = content.replace(key, replace_map[key])
+    if(plan):
+      matched_keys = {};
+      for key in replace_map:
+        if key in content:
+          matched_keys[key] = replace_map[key]
 
-    with open(filepath, "w") as output_file:
-      output_file.write(content)
+      return matched_keys;
+    else:
+      for key in replace_map:
+        content = content.replace(key, replace_map[key])
 
-  def renameFile(self, filepath, replace_map):
+      with open(filepath, "w") as output_file:
+        output_file.write(content)
 
+  def renameFile(self, filepath, replace_map, plan=False):
+
+    # Given a path only rename the basename
     if os.path.exists(filepath) and filepath != ".":
-      newpath = filepath
+      dirname = os.path.dirname(filepath)
+      basename = os.path.basename(filepath)
   
       for key in replace_map:
-        newpath = newpath.replace(key, replace_map[key])
+        basename = basename.replace(key, replace_map[key])
 
-      os.rename(filepath, newpath)
+      newpath = os.path.join(dirname, basename)
+      if newpath != filepath:
+        if(plan):
+          return newpath
+        else:
+          os.rename(filepath, newpath)
 
   def run(self):
 
     parser = argparse.ArgumentParser(description="Intelligently refactor text files.")
-    parser.add_argument("-i", "--input_file", help="Path to file to edit.")
+    parser.add_argument("-i", "--input_file", nargs="*", help="Path to file to edit.")
     parser.add_argument("-a", "--all_files", action='store_true', default=False, help="The script will expect stdin to pass a list of file paths to edit.")
     parser.add_argument("-f", "--find", nargs="*", help="Ordered list of tokens to find.", required=True)
     parser.add_argument("-r", "--replace", nargs="*", help="Ordered list of tokens to replace.", required=True)
@@ -116,10 +131,6 @@ class Refactor:
     all_files = args.all_files
     if args.rename:
       all_files = True
-
-    if all_files and (args.input_file or args.plan):
-      sys.stderr.write("Invalid combination of input arguments.  --all_files cannot be used with --plan or --input_file.\n")
-      sys.exit(1)
 
     # If there are more replace tokens than find tokens the code will run but we have to guess the separator and pattern to use.
     # Since this is unlikely to choose correctly it is better to just return an error.
@@ -141,35 +152,41 @@ class Refactor:
       replace_combination = replace_combinations[index]
       replace_map[find_combination] = replace_combination
 
+    # Datastructures to store planned changes
+    all_changed_keys = {}
+    all_changed_filepaths = {}
+
+    filepaths = []
     if all_files:
-      filepaths = []
       for line in sys.stdin:
         fullpath = os.path.abspath(line.rstrip('\n'))
         filepaths.append(fullpath)
 
-      # If we rename files and directories we need to rename the bottom most files first
-      # So get the full paths of the files and sort by length
-      # This won't work with wonky inputs (weird relative paths or symlinks) but should work 99% of the time
-      filepaths.sort(lambda x,y: cmp(len(y), len(x)))
+    if args.input_file != None:
+      for filepath in args.input_file:
+        filepath.append(filepath)
 
-      for filepath in filepaths:
-        if os.path.isfile(filepath):
+    for filepath in filepaths:
+      if os.path.isfile(filepath):
+        if args.plan:
+          changed_keys = self.refactorFile(filepath, replace_map, True)
+          all_changed_keys.update(changed_keys)
+        else:
           self.refactorFile(filepath, replace_map)
-        if args.rename:
+      if args.rename:
+        if args.plan:
+          new_filepath = self.renameFile(filepath, replace_map, True)
+          if new_filepath != None:
+            all_changed_filepaths[filepath] = new_filepath
+        else:
           self.renameFile(filepath, replace_map)
-        
-    else:
-      if args.plan:
-        content = None
-        if args.input_file:
-          with open(args.input_file, "r") as input_file:
-            content = input_file.read()
 
-        for key in replace_map:
-          if key in content:
-            print(key + " -> " + replace_map[key])
-      else:
-        self.refactorFile(args.input_file, replace_map)
+    if args.plan:
+      for key in all_changed_keys:
+        print(key + " -> " + all_changed_keys[key])
+
+      for key in all_changed_filepaths:
+        print(key + " -> " + all_changed_filepaths[key])
 
 refactor = Refactor();
 refactor.run();
