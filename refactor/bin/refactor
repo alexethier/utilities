@@ -162,7 +162,10 @@ class Refactor:
         input_filepaths.append(line)
     if args.input_file != None:
       for filepath in args.input_file:
-        input_filepaths.append(filepath)
+        if os.path.isfile(filepath):
+          input_filepaths.append(filepath)
+        else:
+          print("WARNING: Invalid file path supplied: " + str(filepath))    
 
     filepaths = []
     for input_filepath in input_filepaths:
