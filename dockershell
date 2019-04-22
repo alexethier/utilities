@@ -1,12 +1,47 @@
 #!/bin/bash
 
+ROOT=true
+
+# Parse command line
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    # If arguments come in the form a=b
+    if [[ $1 == *'='* ]]
+    then
+        IFS='=' read -ra key_pair <<< "$1"
+        key="${key_pair[0]}"
+        value="${key_pair[1]}"
+    fi
+
+    case $key in
+        --noroot)
+            ROOT=false
+            ;;
+        --no-root)
+            ROOT=false
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+
 IMAGE_ID=`docker images | head -n 2 | grep -v REPOSITORY | tr -s ' ' | cut -d ' ' -f3`
 if [ -n "$1" ]; then
     IMAGE_ID="$1"
 fi
 
-
-CONT_ID=`docker run -idt $IMAGE_ID /bin/bash`
+ROOT_CMD=""
+if [ "$ROOT" = true ] ; then
+    ROOT_CMD="--user root"
+fi
+CONT_ID=`docker run -idt $ROOT_CMD $IMAGE_ID /bin/bash`
 
 
 function clean {
