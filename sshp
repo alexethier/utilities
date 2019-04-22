@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Sets up ssh agent before connecting to remote ssh server.
+
+eval `ssh-agent`
+ssh-add
+ssh $@

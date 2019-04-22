@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Script to become root without losing your env. variables.
+# -E retains all env. variables except a single undocumented one, the only one we actually fruit caking want, the PATH!
+
+PATHP=$PATH
+sudo -E PATH="$PATHP" /bin/bash

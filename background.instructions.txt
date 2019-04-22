@@ -1,3 +1,5 @@
+# Steps for converting an open process to safely run in the background
+
 ctrl-z
 bg
 
