@@ -4,4 +4,4 @@
 
 eval `ssh-agent`
 ssh-add
-ssh $@
+ssh -A $@

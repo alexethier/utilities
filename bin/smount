@@ -1,0 +1,3 @@
+#!/bin/bash
+
+# Idea mount this repo's bin to external host via ssh scp commands.
