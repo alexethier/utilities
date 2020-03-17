@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Only run yarn build if source files have changed.
+
+YARN_COMMAND="$1"
+NEW_CHECKSUM=`git ls-files | sort | xargs -I {} cat {} | md5sum | cut -d' ' -f1`
+OLD_CHECKSUM=`cat ./node_modules/yarn.${YARN_COMMAND}.checksum`
+
+if [ "$NEW_CHECKSUM" != "$OLD_CHECKSUM" ];then
+  /opt/node/bin/yarn $@
+  echo "$NEW_CHECKSUM" > ./node_modules/yarn.${YARN_COMMAND}.checksum
+else
+  echo "No changes detected, skipping yarn."
+fi
