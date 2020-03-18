@@ -11,9 +11,9 @@ while true; do
 
   TICKETS=`klist --json`
   if [ "$TICKETS" -eq "{}" ]; then
-    echo "No ticket found."
+    echo "[$(date)] No ticket found."
   else
-    echo "Existing ticket"
+    echo "[$(date)] Existing ticket"
     echo "$TICKETS"
     # Assumes we only ever have one ticket, or at least the first one is the one we care about
     EXPIRES=`klist --json | jq -r '.tickets[0]["Expires"]' | xargs -I {} date --date="{}" +"%s" | xargs -I {} /bin/bash -c 'echo "$(({} - $(date +%s)))"'`
@@ -26,7 +26,7 @@ while true; do
     cat $LOGIN_FILE | kinit --password-file=STDIN $USER
   else
     SLEEP_TIME=$((3005 - ${ISSUED}))
-    echo "Valid ticket found, sleeping for $SLEEP_TIME"
+    echo "[$(date)] Valid ticket found, sleeping for $SLEEP_TIME"
     sleep $SLEEP_TIME
   fi
 
@@ -42,7 +42,7 @@ while true; do
 
   TICKETS=`klist --json`
   if [ "$TICKETS" -eq "{}" ]; then
-    echo "Failed getting ticket, short sleep"
+    echo "[$(date)] Failed getting ticket, short sleep"
     sleep 60
   fi
 done
