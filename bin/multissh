@@ -1,7 +1,6 @@
 #!/bin/bash
 
-#!/bin/bash
-
+COMMAND=""
 COMMAND_USER=""
 USER=""
 HOSTS=""
@@ -38,14 +37,6 @@ do
             HOST="$value"
             shift
             ;;
-        -c)
-            COMMAND="$value"
-            shift
-            ;;
-        --command)
-            COMMAND="$value"
-            shift
-            ;;
         -s)
             COMMAND_USER="root"
             ;;
@@ -61,8 +52,8 @@ do
             shift
             ;;
         *)
-            echo "Unknown option passed: $key"
-            exit 1
+            COMMAND="$COMMAND $key"
+            echo "ADDED TO COMMAND $COMMAND"
             ;;
     esac
     shift
@@ -72,7 +63,7 @@ if [ -f ~/.aetmp/multissh.txt ]; then
     if [ ! -n "$USER" ]; then
         USER=`cat ~/.aetmp/multissh.txt | grep "USER" | cut -d '=' -f2`
     fi
-    if [ ! -n "$HOST" ]; then
+    if [ ! -n "$HOSTS" ]; then
         HOSTS=`cat ~/.aetmp/multissh.txt | grep "HOSTS" | cut -d '=' -f2`
     fi
 fi
@@ -103,14 +94,19 @@ fi
 HOSTS_ARRAY=`echo $HOSTS | xargs -n 1`
 
 if [ "$REPLAY" -gt 0 ];then
-  COMMANDS=`cat ~/.aetmp/multissh.commands.txt | tail -n $REPLAY`
+
+  IFS=$'\n'
+  COMMANDS=($(cat ~/.aetmp/multissh.commands.txt | tail -n $REPLAY))
+  unset IFS
 else
-  COMMANDS=($COMMAND)
+  COMMANDS[0]=$COMMAND
 fi
 
-
 for HOST in $HOSTS; do
-  for COMMAND in $COMMANDS; do
-    ssh -t $USER@$HOST "/usr/bin/sudo su -c \"$COMMAND\" $COMMAND_USER"
+  for i in $(echo ${!COMMANDS[@]}); do
+    COMMAND="${COMMANDS[$i]}"
+    STR_COMMAND="ssh -t $USER@$HOST \"/usr/bin/sudo su -c \\\"$COMMAND\\\" $COMMAND_USER\""
+    echo "$STR_COMMAND"
+    eval $STR_COMMAND
   done
 done
