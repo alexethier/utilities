@@ -10,8 +10,9 @@ while true; do
   sleep 1
 
   TICKETS=`klist --json`
-  if [ "$TICKETS" -eq "{}" ]; then
+  if [ "$TICKETS" == "{}" ]; then
     echo "[$(date)] No ticket found."
+    ISSUED=999999
   else
     echo "[$(date)] Existing ticket"
     echo "$TICKETS"
