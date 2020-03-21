@@ -6,6 +6,7 @@ USER=""
 HOSTS=""
 SUDO=false
 REPLAY=0
+PLAN=false
 
 while [[ $# > 0 ]]
 do
@@ -51,9 +52,14 @@ do
             REPLAY="$value"
             shift
             ;;
+        -p)
+            PLAN=true
+            ;;
+        --plan)
+            PLAN=true
+            ;;
         *)
             COMMAND="$COMMAND $key"
-            echo "ADDED TO COMMAND $COMMAND"
             ;;
     esac
     shift
@@ -107,6 +113,8 @@ for HOST in $HOSTS; do
     COMMAND="${COMMANDS[$i]}"
     STR_COMMAND="ssh -t $USER@$HOST \"/usr/bin/sudo su -c \\\"$COMMAND\\\" $COMMAND_USER\""
     echo "$STR_COMMAND"
-    eval $STR_COMMAND
+    if [ "$PLAN" = false ]; then
+      eval $STR_COMMAND
+    fi
   done
 done
