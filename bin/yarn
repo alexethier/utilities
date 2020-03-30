@@ -10,5 +10,5 @@ if [ "$NEW_CHECKSUM" != "$OLD_CHECKSUM" ];then
   /opt/node/bin/yarn $@
   echo "$NEW_CHECKSUM" > ./node_modules/yarn.${YARN_COMMAND}.checksum
 else
-  echo "No changes detected, skipping yarn."
+  echo "No changes detected, skipping yarn command: /opt/node/bin/yarn $@"
 fi

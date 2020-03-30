@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Defaults
+SEARCH=""
+BEFORE=""
+AFTER=""
+LINES=6
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    # If arguments come in the form a=b
+    if [[ $1 == *'='* ]]
+    then
+        IFS='=' read -ra key_pair <<< "$1"
+        key="${key_pair[0]}"
+        value="${key_pair[1]}"
+    fi
+
+    case $key in
+        -s)
+            SEARCH="$value"
+            shift
+            ;;
+        --search)
+            SEARCH="$value"
+            shift
+            ;;
+        -b)
+            BEFORE="$value"
+            shift
+            ;;
+        --before)
+            BEFORE="$value"
+            shift
+            ;;
+        -a)
+            AFTER="$value"
+            shift
+            ;;
+        --after)
+            AFTER="$value"
+            shift
+            ;;
+        -l)
+            LINES="$value"
+            shift
+            ;;
+        --lines)
+            LINES="$value"
+            shift
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+DOUBLE_LINES=$(($LINES*2))
+MATCHES=$(grep -n -r $SEARCH -A $LINES -B $LINES *)
+for MATCH in $MATCHES; do
+    echo ""
+    echo "NEXT"
+    echo "$MATCH"
+    echo ""
+done
+#grep -n -r $SEARCH -A $LINES -B $LINES * | grep $BEFORE -A $DOUBLE_LINES  | grep $AFTER -B $LINES | grep $SEARCH
