@@ -4,6 +4,7 @@
 EXPRESSION=""
 FILE_FILTER=" -type f "
 COPY_LOCATION=""
+DELETE=false
 
 while [[ $# > 0 ]]
 do
@@ -28,12 +29,23 @@ do
             shift
             ;;
         -c)
-            COPY_LOCATION="$value"
+            COPY_LOCATION=$value
+            last_char="${COPY_LOCATION: -1}"
+            while [ "$last_char" == "/" ] || [ "$last_char" == " " ]; do
+              COPY_LOCATION=${COPY_LOCATION::-1}
+              last_char="${COPY_LOCATION: -1}"
+            done
             shift
             ;;
         --copy)
             COPY_LOCATION="$value"
             shift
+            ;;
+        -d)
+            DELETE=true
+            ;;
+        --delete)
+            DELETE=true
             ;;
         --no-filter)
             FILE_FILTER=""
@@ -60,12 +72,48 @@ fi
 mkdir -p ~/.aetmp
 echo "EXPRESSION=$EXPRESSION" > ~/.aetmp/findr.txt
 
-POSTFIX=""
+#POSTFIX=""
+#if [ -n "$COPY_LOCATION" ]; then
+#  mkdir -p $COPY_LOCATION
+#  echo "Copying to $COPY_LOCATION"
+#  POSTFIX="$POSTFIX | xargs -I {} /bin/bash -cx \"cp {} $COPY_LOCATION/\""
+#fi
+#
+#COMMAND="find . $FILE_FILTER | grep -e $EXPRESSION $POSTFIX"
+#eval $COMMAND
+
+FILES=`find . $FILE_FILTER | grep -e $EXPRESSION`
+#for file in $FILES; do
+#    echo $file
+#    
+#    #if [ -n "$COPY_LOCATION" ]; then
+#    #  echo "Copying $file to $COPY_LOCATION"
+#    #  cp $file $COPY_LOCATION/
+#    #fi
+#
+#    if [ "$DELETE" == "true" ]; then
+#      rm $file
+#    fi
+#done
+
+print=true
+
 if [ -n "$COPY_LOCATION" ]; then
-  mkdir -p $COPY_LOCATION
-  echo "Copying to $COPY_LOCATION"
-  POSTFIX="$POSTFIX | xargs -I {} /bin/bash -cx \"cp {} $COPY_LOCATION/\""
+  for file in $FILES; do
+    eval "/bin/bash -cx \"cp $file $COPY_LOCATION/\""
+  done
+  print=false
 fi
 
-COMMAND="find . $FILE_FILTER | grep -e $EXPRESSION $POSTFIX"
-eval $COMMAND
+if [ "$DELETE" == "true" ]; then
+  for file in $FILES; do
+    eval "/bin/bash -cx \"rm -f $file\""
+  done
+  print=false
+fi
+
+if [ "$print" == "true" ]; then
+  for file in $FILES; do
+    echo "$file"
+  done
+fi

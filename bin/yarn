@@ -1,14 +1,77 @@
 #!/bin/bash
 
+ARGS=()
+VERBOSE=false
+FORCE=false
+MAIN_YARN=false
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    # If arguments come in the form a=b
+    if [[ $1 == *'='* ]]
+    then
+        IFS='=' read -ra key_pair <<< "$1"
+        key="${key_pair[0]}"
+        value="${key_pair[1]}"
+    fi
+
+    case $key in
+        -f)
+            if [ "$MAIN_YARN" == "false" ]; then
+                FORCE=true
+            else
+                ARGS+=("$key")
+            fi
+            ;;
+        --force)
+            if [ "$MAIN_YARN" == "false" ]; then
+                FORCE=true
+            else
+                ARGS+=("$key")
+            fi
+            ;;
+        -v)
+            if [ "$MAIN_YARN" == "false" ]; then
+                VERBOSE=true
+            else
+                ARGS+=("$key")
+            fi
+            ;;
+        --verbose)
+            if [ "$MAIN_YARN" == "false" ]; then
+                VERBOSE=true
+            else
+                ARGS+=("$key")
+            fi
+            ;;
+        *)
+            MAIN_YARN=true
+            ARGS+=("$key")
+            ;;
+    esac
+    shift
+done
+
 # Only run yarn build if source files have changed.
 
-YARN_COMMAND="$1"
+YARN_COMMAND="${ARGS[0]}"
+YARN_FULL_COMMAND="/opt/node/bin/yarn ${ARGS[*]}"
 NEW_CHECKSUM=`git ls-files | sort | xargs -I {} cat {} | md5sum | cut -d' ' -f1`
 OLD_CHECKSUM=`cat ./node_modules/yarn.${YARN_COMMAND}.checksum`
 
-if [ "$NEW_CHECKSUM" != "$OLD_CHECKSUM" ];then
-  /opt/node/bin/yarn $@
+if [ "$VERBOSE" == "true" ]; then
+    echo "Current checksum: $NEW_CHECKSUM"
+    echo "Old Checksum: $OLD_CHECKSUM"
+    echo "Main command: $YARN_COMMAND"
+    echo "Full yarn command: $YARN_FULL_COMMAND"
+fi
+
+if [ "$NEW_CHECKSUM" != "$OLD_CHECKSUM" ] || [ "$FORCE" == "true" ];then
+  eval $YARN_FULL_COMMAND
   echo "$NEW_CHECKSUM" > ./node_modules/yarn.${YARN_COMMAND}.checksum
 else
-  echo "No changes detected, skipping yarn command: /opt/node/bin/yarn $@"
+  echo "No changes detected, skipping yarn command: $YARN_FULL_COMMAND"
 fi
