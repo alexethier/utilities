@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+echo "public String toJson() {"
+echo ""
+echo "  JSONObject jsonObject = new JSONObject();"
+echo ""
+
+vars=`cat $1 | grep -e "private String\|private long\|private double\|private int\|private boolean" | tr -s ' ' | cut -d' ' -f4 | sed 's/;//g'`
+for var in $vars; do
+  split_vars=`echo $var | sed 's/\([A-Z]\)/ \1/g' | sed 's/^ *//;s/ *$//' | tr '[:upper:]' '[:lower:]'`
+  joined_vars=`echo $split_vars | sed 's/ /\./g'`
+  echo "  jsonObject.put(\"$joined_vars\", $var);"
+done
+
+echo ""
+echo "  return jsonObject.toJSONString();"
+echo "}"
