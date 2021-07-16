@@ -1,0 +1,74 @@
+#!/bin/bash
+
+POD_NAME=""
+USER=""
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    # If arguments come in the form a=b
+    if [[ $1 == *'='* ]]
+    then
+        IFS='=' read -ra key_pair <<< "$1"
+        key="${key_pair[0]}"
+        value="${key_pair[1]}"
+    fi
+
+    case $key in
+        -n)
+            POD_NAME="$value"
+            shift
+            ;;
+        --name)
+            POD_NAME="$value"
+            shift
+            ;;
+        -u)
+            USER="$value"
+            shift
+            ;;
+        --user)
+            USER="$value"
+            shift
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Save settings
+if [ -f ~/.aetmp/kube_connect.txt ]; then
+    if [ ! -n "$USER" ]; then
+        USER=`cat ~/.aetmp/kube_connect.txt | grep "USER" | cut -d '=' -f2`
+    fi
+    if [ ! -n "$POD_NAME" ]; then
+        POD_NAME=`cat ~/.aetmp/kube_connect.txt | grep "POD_NAME" | cut -d '=' -f2`
+    fi
+fi
+
+if [ ! -n "$POD_NAME" ]; then
+    echo "Missing pod name, supply with -n"
+    exit 1
+fi
+
+if [ ! -n "$POD_NAME" ]; then
+    echo "Missing user, supply with -u"
+    exit 1
+fi
+
+mkdir -p ~/.aetmp
+echo "USER=$USER" > ~/.aetmp/kube_connect.txt
+echo "POD_NAME=$POD_NAME" >> ~/.aetmp/kube_connect.txt
+
+pod_id=`kubectl get pods | grep $POD_NAME | grep Running | tail -n 1 | cut -d' ' -f1`
+
+if [ "$USER" == "root" ]; then
+    kubectl exec --stdin --tty $pod_id -- /bin/bash
+else
+    kubectl exec --stdin --tty $pod_id -- /bin/bash -c "su $USER"
+fi
