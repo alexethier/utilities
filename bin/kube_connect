@@ -2,6 +2,8 @@
 
 POD_NAME=""
 USER=""
+COPY=""
+DESTINATION=""
 
 while [[ $# > 0 ]]
 do
@@ -32,6 +34,25 @@ do
         --user)
             USER="$value"
             shift
+            ;;
+        -c)
+            COPY="$value"
+            shift
+            ;;
+        --copy)
+            COPY="$value"
+            shift
+            ;;
+        -d)
+            DESTINATION="$value"
+            shift
+            ;;
+        --dest)
+            DESTINATION="$value"
+            shift
+            ;;
+        -v)
+            set -x
             ;;
         *)
             echo "Unknown option passed: $key"
@@ -67,8 +88,27 @@ echo "POD_NAME=$POD_NAME" >> ~/.aetmp/kube_connect.txt
 
 pod_id=`kubectl get pods | grep $POD_NAME | grep Running | tail -n 1 | cut -d' ' -f1`
 
-if [ "$USER" == "root" ]; then
-    kubectl exec --stdin --tty $pod_id -- /bin/bash
+if [ ! -n "$COPY" ]; then
+
+    if [ "$USER" == "root" ]; then
+        kubectl exec --stdin --tty $pod_id -- /bin/bash
+    else
+        kubectl exec --stdin --tty $pod_id -- /bin/bash -c "su $USER"
+    fi
+
 else
-    kubectl exec --stdin --tty $pod_id -- /bin/bash -c "su $USER"
+
+    FILENAME=`basename $COPY`
+    DEST_DIRNAME=`dirname $DESTINATION`
+
+    kubectl cp $COPY $pod_id:/tmp/$FILENAME
+    if [ "$USER" != "root" ]; then
+        kubectl exec $pod_id -- /bin/bash -c "chown $USER /tmp/$FILENAME"
+    fi
+
+    if [ -n "$DESTINATION" ]; then
+        kubectl exec $pod_id -- /bin/bash -c "mv /tmp/$FILENAME $DESTINATION"
+        kubectl exec $pod_id -- /bin/bash -c "ls -l $DEST_DIRNAME"
+    fi
+
 fi
