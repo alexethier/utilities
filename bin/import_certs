@@ -1,0 +1,68 @@
+#!/bin/bash
+
+INPUT_URL=""
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    # If arguments come in the form a=b
+    if [[ $1 == *'='* ]]
+    then
+        IFS='=' read -ra key_pair <<< "$1"
+        key="${key_pair[0]}"
+        value="${key_pair[1]}"
+    fi
+
+    case $key in
+        -u)
+            INPUT_URL="$value"
+            shift
+            ;;
+        --user)
+            INPUT_URL="$value"
+            shift
+            ;;
+        -h)
+            echo ""
+            echo "Common Flags:"
+            echo " -u : Specify the url"
+            echo ""
+            echo "Example Command:"
+            echo "import_certs -u https://www.google.com/test"
+            echo ""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+HOST=""
+PORT=""
+TMP_URL="$INPUT_URL"
+if [[ $INPUT_URL == 'http'* ]]; then
+  if [[ $INPUT_URL == 'https'* ]]; then
+    TMP_URL=`echo $INPUT_URL | cut -c 9-`
+    PORT="443"
+  else
+    echo "Http url does not have certs"
+    exit 0
+  fi
+fi
+TMP_URL2=`echo $TMP_URL | cut -d'/' -f1`
+
+if [[ $TMP_URL2 == *':'* ]]; then
+  PORT=`echo $TMP_URL2 | cut -d':' -f2`
+  HOST=`echo $TMP_URL2 | cut -d':' -f1`
+else
+  HOST=$TMP_URL2
+fi
+
+echo "final"
+echo "Host $HOST"
+echo "Port $PORT"
