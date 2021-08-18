@@ -1,5 +1,6 @@
 #!/bin/bash
 
+CHAIN_PATH="/tmp/tmp.chain.crt"
 INPUT_URL=""
 
 while [[ $# > 0 ]]
@@ -43,12 +44,11 @@ do
 done
 
 HOST=""
-PORT=""
+PORT="443"
 TMP_URL="$INPUT_URL"
 if [[ $INPUT_URL == 'http'* ]]; then
   if [[ $INPUT_URL == 'https'* ]]; then
     TMP_URL=`echo $INPUT_URL | cut -c 9-`
-    PORT="443"
   else
     echo "Http url does not have certs"
     exit 0
@@ -63,6 +63,27 @@ else
   HOST=$TMP_URL2
 fi
 
-echo "final"
-echo "Host $HOST"
-echo "Port $PORT"
+###
+echo "Loading cert chain from $HOST:$PORT"
+raw_certs=`openssl s_client -showcerts -verify 5 -connect $HOST:$PORT < /dev/null 2>/dev/null`
+echo "Exporting cert chain to $CHAIN_PATH"
+echo "$raw_certs" | sed -n "/BEGIN CERTIFICATE/,/END CERTIFICATE/p" > $CHAIN_PATH
+echo "Searching for java keystores."
+java_keystores=()
+mac_java=`echo $(/usr/libexec/java_home)`
+if [ -d "$mac_java" ]; then
+  java_keystores+=("$mac_java")
+fi
+
+for java_keystore in $java_keystores; do
+  keystore_path=`find $java_keystore | grep cacert`
+  if [ -f "$keystore_path" ]; then
+    echo "Found Java keystore at $keystore_path"
+
+    # Count the number of lines the first cert in the chain takes up
+    count=`cat /tmp/cert.chain.crt  | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p; /END/q' | wc -l | sed 's/ //g'`
+    #keytool -importkeystore -deststorepass MYPASSWORD -destkeypass MYPASSWORD -destkeystore MyDSKeyStore.jks -srckeystore cert_and_key.p12 -srcstoretype PKCS12 -srcstorepass MYPASSWORD -alias tomcat
+    #keytool -import -trustcacerts -alias root -file chain.pem -keystore MyDSKeyStore.jks -storepass MYPASSWORD
+
+  fi
+done
