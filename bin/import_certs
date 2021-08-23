@@ -1,7 +1,12 @@
 #!/bin/bash
 
+DEFAULT_JAVA_KEYSTORE_PASS="changeit"
 CHAIN_PATH="/tmp/tmp.chain.crt"
+TMP_CERT_PATH="/tmp/tmp.cert.crt"
 INPUT_URL=""
+
+# Keystore paths
+java_keystore_paths=()
 
 while [[ $# > 0 ]]
 do
@@ -25,13 +30,23 @@ do
             INPUT_URL="$value"
             shift
             ;;
+        --jks)
+            JAVA_KEYSTORE_PATH="$value"
+            if [ -f "$JAVA_KEYSTORE_PATH" ]; then
+                java_keystore_paths+=("$JAVA_KEYSTORE_PATH")
+            else
+                echo "Invalid jks path $JAVA_KEYSTORE_PATH"
+                exit 1
+            fi
+            shift
+            ;;
         -h)
             echo ""
             echo "Common Flags:"
             echo " -u : Specify the url"
             echo ""
             echo "Example Command:"
-            echo "import_certs -u https://www.google.com/test"
+            echo "import_certs -u https://www.google.com/test [ --jks /path/to/java/cacerts ]"
             echo ""
             exit 0
             ;;
@@ -68,22 +83,49 @@ echo "Loading cert chain from $HOST:$PORT"
 raw_certs=`openssl s_client -showcerts -verify 5 -connect $HOST:$PORT < /dev/null 2>/dev/null`
 echo "Exporting cert chain to $CHAIN_PATH"
 echo "$raw_certs" | sed -n "/BEGIN CERTIFICATE/,/END CERTIFICATE/p" > $CHAIN_PATH
-echo "Searching for java keystores."
-java_keystores=()
-mac_java=`echo $(/usr/libexec/java_home)`
-if [ -d "$mac_java" ]; then
-  java_keystores+=("$mac_java")
+
+if [[ "${#java_keystore_paths[@]}" == "0" ]]; then 
+    echo ""
+    echo "Searching for java keystores."
+    java_keystore_search=()
+    mac_java=`echo $(/usr/libexec/java_home)`
+    if [ -d "$mac_java" ]; then
+      java_keystore_search+=("$mac_java")
+    fi
+
+    for java_keystore in $java_keystore_search; do
+      keystore_path=`find $java_keystore | grep cacert`
+      if [ -f "$keystore_path" ]; then
+        echo "Found Java keystore at $keystore_path"
+        java_keystore_paths+=("$keystore_path")
+      fi
+    done
 fi
 
-for java_keystore in $java_keystores; do
-  keystore_path=`find $java_keystore | grep cacert`
-  if [ -f "$keystore_path" ]; then
-    echo "Found Java keystore at $keystore_path"
+# Count the number of lines the first cert in the chain takes up
+cert_chain_text=`cat $CHAIN_PATH`
+count=`echo "$cert_chain_text"  | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p; /END/q' | wc -l | sed 's/ //g'`
+num_certs=0
+while  [ "$count" -gt "0" ];
+do
+    cert=`echo "$cert_chain_text" | head -n $count`
+    cert_chain_text=`echo "$cert_chain_text" | tail -n "+${count}" | tail -n +2`
+    count=`echo "$cert_chain_text"  | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p; /END/q' | wc -l | sed 's/ //g'`
+    num_certs=$(($num_certs+1))
 
-    # Count the number of lines the first cert in the chain takes up
-    count=`cat /tmp/cert.chain.crt  | sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p; /END/q' | wc -l | sed 's/ //g'`
+    cert_fingerprint=`echo "$cert" | openssl x509 -noout -fingerprint -sha256 -inform pem`
+    echo ""
+    echo "Processing cert: $cert_fingerprint"
+    for java_keystore_path in $java_keystore_paths
+    do
+        echo "    Loading $cert_fingerprint into $java_keystore_path"
+        echo "$cert" > $TMP_CERT_PATH
+        keytool -import -noprompt -storepass "$DEFAULT_JAVA_KEYSTORE_PASS" -file "$TMP_CERT_PATH" -keystore "$java_keystore_path" -alias "$cert_fingerprint"
+    done
+
+done
+echo "Processed $num_certs certs."
+
     #keytool -importkeystore -deststorepass MYPASSWORD -destkeypass MYPASSWORD -destkeystore MyDSKeyStore.jks -srckeystore cert_and_key.p12 -srcstoretype PKCS12 -srcstorepass MYPASSWORD -alias tomcat
     #keytool -import -trustcacerts -alias root -file chain.pem -keystore MyDSKeyStore.jks -storepass MYPASSWORD
 
-  fi
-done
