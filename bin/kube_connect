@@ -86,27 +86,44 @@ mkdir -p ~/.aetmp
 echo "USER=$USER" > ~/.aetmp/kube_connect.txt
 echo "POD_NAME=$POD_NAME" >> ~/.aetmp/kube_connect.txt
 
-pod_id=`kubectl get pods | grep $POD_NAME | grep Running | tail -n 1 | cut -d' ' -f1`
+pod_id=`kubectl get pods | grep Running | cut -d' ' -f1 | grep "$POD_NAME"`
+if [ -z "$pod_id" ]; then
+    echo "Could not find running pod with matching name $POD_NAME"
+    exit 1
+fi
+
+num_pods="$(echo "$pod_id" | wc -l)"
+if [[ "$num_pods" != "1" ]]; then
+    echo "Found $num_pods matching pod names, pick a more specific name (-n)."
+    echo ""
+    echo "Matched pod names"
+    echo "$pod_id"
+    exit 1
+fi
 
 if [ ! -n "$COPY" ]; then
 
     if [ "$USER" == "root" ]; then
+        echo "Connecting to pod $pod_id as root"
         kubectl exec --stdin --tty $pod_id -- /bin/bash
     else
+        echo "Connecting to pod $pod_id as $USER"
         kubectl exec --stdin --tty $pod_id -- /bin/bash -c "su $USER"
     fi
 
 else
 
     FILENAME=`basename $COPY`
-    DEST_DIRNAME=`dirname $DESTINATION`
 
+    echo "Copying $COPY to $pod_id at temp path /tmp/$FILENAME"
     kubectl cp $COPY $pod_id:/tmp/$FILENAME
     if [ "$USER" != "root" ]; then
         kubectl exec $pod_id -- /bin/bash -c "chown $USER /tmp/$FILENAME"
     fi
 
     if [ -n "$DESTINATION" ]; then
+        echo "Moving file inside pod to $DESTINATION"
+        DEST_DIRNAME=`dirname $DESTINATION`
         kubectl exec $pod_id -- /bin/bash -c "mv /tmp/$FILENAME $DESTINATION"
         kubectl exec $pod_id -- /bin/bash -c "ls -l $DEST_DIRNAME"
     fi
