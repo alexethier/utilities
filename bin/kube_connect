@@ -122,10 +122,9 @@ else
     fi
 
     if [ -n "$DESTINATION" ]; then
-        echo "Moving file inside pod to $DESTINATION"
-        DEST_DIRNAME=`dirname $DESTINATION`
+        echo "Moving $FILENAME inside pod to $DESTINATION"
         kubectl exec $pod_id -- /bin/bash -c "mv /tmp/$FILENAME $DESTINATION"
-        kubectl exec $pod_id -- /bin/bash -c "ls -l $DEST_DIRNAME"
+        kubectl exec $pod_id -- /bin/bash -c "ls -l $DESTINATION"
     fi
 
 fi
