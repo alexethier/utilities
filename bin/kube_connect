@@ -5,6 +5,15 @@ USER=""
 COPY=""
 DESTINATION=""
 
+function help() {
+    echo "Usage: kube_connect -n <pod_name> [ -u <username> ]"
+    echo " -n : Pod name to find and connect to."
+    echo " -u : Username for connection to pod."
+    echo " -c <filename> : Path to file to copy into the container."
+    echo " -d <destination> : Path inside pod where copied file is moved to."
+    echo " -v : Verbose log level."
+}
+
 while [[ $# > 0 ]]
 do
     key="$1"
@@ -54,8 +63,13 @@ do
         -v)
             set -x
             ;;
+        -h)
+            help
+            exit 0
+            ;;
         *)
             echo "Unknown option passed: $key"
+            help
             exit 1
             ;;
     esac
