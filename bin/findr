@@ -1,4 +1,7 @@
 #!/bin/bash
+# Prototype script that will quickly find file types in cwd based on matching expression.
+# Has options for copying matched files to target destination
+# Will remember the last match expression used
 
 # Defaults
 EXPRESSION=""

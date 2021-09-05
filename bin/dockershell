@@ -1,4 +1,5 @@
 #!/bin/bash
+# Prototype script that launches, runs, and connects to the most recently built docker image.
 
 ROOT=true
 

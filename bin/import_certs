@@ -1,4 +1,6 @@
 #!/bin/bash
+# Prototype script that will take in a url and download the TLS cert
+# The script will try to auto-import the cert into various truststores on the system
 
 DEFAULT_JAVA_KEYSTORE_PASS="changeit"
 CHAIN_PATH="/tmp/tmp.chain.crt"

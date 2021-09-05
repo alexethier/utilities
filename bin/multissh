@@ -1,4 +1,5 @@
 #!/bin/bash
+# Highly expiramental script to run commands on multiple SSH hosts
 
 COMMAND=""
 COMMAND_USER=""

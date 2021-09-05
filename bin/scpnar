@@ -1,0 +1,469 @@
+#!/bin/bash
+# A tool for uploading NiFi Nar files on remote systems.
+
+# Immediately kill everything on exit signal.
+trap "trap - INT; kill -s HUP -- -$$" INT
+
+# Defaults
+USER=""
+HOST=""
+INSTANCE="nifi"
+RESET=false
+BACKUP=false
+RESTART=true
+FOLLOW=true
+REMOVE=false
+PEM_LOCATION="~/.ssh/id_rsa"
+LOG_LEVEL=1
+DOWNLOAD_THREADS=2
+MAX_BATCH_SIZE=4
+
+CONTROL_PERSIST=false
+CONTROL_UID=""
+CONTROL_PERSIST_PATH=""
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    # If arguments come in the form a=b
+    if [[ $1 == *'='* ]]
+    then
+        IFS='=' read -ra key_pair <<< "$1"
+        key="${key_pair[0]}"
+        value="${key_pair[1]}"
+    fi
+
+    case $key in
+        -h)
+            HOST="$value"
+            shift
+            ;;
+        --host)
+            HOST="$value"
+            shift
+            ;;
+        -u)
+            USER="$value"
+            shift
+            ;;
+        --user)
+            USER="$value"
+            shift
+            ;;
+        -b)
+            BACKUP=true
+            ;;
+        --backup)
+            BACKUP=true
+            ;;
+        -r)
+            REMOVE=true
+            ;;
+        --remove)
+            REMOVE=true
+            ;;
+        -i)
+            INSTANCE="$value"
+            shift
+            ;;
+        --instance)
+            INSTANCE="$value"
+            shift
+            ;;
+        -p)
+            PEM_LOCATION="$value"
+            shift
+            ;;
+        --pem)
+            PEM_LOCATION="$value"
+            shift
+            ;;
+        -t)
+            DOWNLOAD_THREADS="$value"
+            shift
+            ;;
+        --threads)
+            DOWNLOAD_THREADS="$value"
+            shift
+            ;;
+        -m)
+            MAX_BATCH_SIZE="$value"
+            shift
+            ;;
+        --max-batch)
+            MAX_BATCH_SIZE="$value"
+            shift
+            ;;
+        --undo)
+            RESET=true
+            ;;
+        --no-restart)
+            RESTART=false
+            ;;
+        --no-follow)
+            FOLLOW=false
+            ;;
+        -c)
+            echo "Control persist is expiramental and does not always work."
+            CONTROL_PERSIST=true
+            CONTROL_UID=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1`
+            CONTROL_PERSIST_PATH="/tmp/scpnar.$CONTROL_UID.sock"
+            ;;
+        --control)
+            echo "Control persist is expiramental and does not always work."
+            CONTROL_PERSIST=true
+            CONTROL_UID=`cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1`
+            CONTROL_PERSIST_PATH="/tmp/scpnar.$CONTROL_UID.sock"
+            ;;
+        -v)
+            LOG_LEVEL=2
+            ;;
+        -vv)
+            LOG_LEVEL=3
+            ;;
+        -vvv)
+            set -x
+            LOG_LEVEL=4
+            ;;
+        -vvvv)
+            set -x
+            LOG_LEVEL=5
+            ;;
+        -e)
+            echo ""
+            echo "Common Flags:"
+            echo " -u : Sets the user"
+            echo " -h : Sets the host"
+            echo " -i : Sets the Nifi instance (defaults to 'nifi')"
+            echo " -b : Creates a backup directory before upload."
+            echo " -e : Prints this help message and then exits."
+            echo ""
+            echo "Example Command:"
+            echo "scpnar -u user@host.mitre.org -i nifi -b"
+            echo ""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Fix host variable
+if [[ `echo $HOST | cut -c -7` == "http://" ]]; then
+    HOST=`echo $HOST | cut -c 8-`
+fi
+if [[ `echo $HOST | cut -c -8` == "https://" ]]; then
+    HOST=`echo $HOST | cut -c 9-`
+fi
+HOST=`echo $HOST | cut -d':' -f1 | cut -d'/' -f1`
+
+# Save settings
+if [ -f ~/.aetmp/scpnar.txt ]; then
+    if [ ! -n "$USER" ]; then
+        USER=`cat ~/.aetmp/scpnar.txt | grep "USER" | cut -d '=' -f2`
+    fi
+    if [ ! -n "$HOST" ]; then
+        HOST=`cat ~/.aetmp/scpnar.txt | grep "HOST" | cut -d '=' -f2`
+    fi
+    if [ ! -n "$INSTANCE" ]; then
+        INSTANCE=`cat ~/.aetmp/scpnar.txt | grep "INSTANCE" | cut -d '=' -f2`
+    fi
+fi
+
+if [ ! -n "$USER" ]; then
+    echo "Unable to determine user"
+    exit 1
+fi
+if [ ! -n "$HOST" ]; then
+    echo "Unable to determine host"
+    exit 1
+fi
+if [ ! -n "$INSTANCE" ]; then
+    echo "Unable to determine nifi instance"
+    exit 1
+fi
+
+mkdir -p ~/.aetmp
+echo "USER=$USER" > ~/.aetmp/scpnar.txt
+echo "HOST=$HOST" >> ~/.aetmp/scpnar.txt
+echo "INSTANCE=$INSTANCE" >> ~/.aetmp/scpnar.txt
+
+log_trace() {
+    if [ $LOG_LEVEL -ge 3 ];then
+        echo -e "\e[37m[TRACE] $@"
+    fi
+}
+log_debug() {
+    if [ $LOG_LEVEL -ge 2 ];then
+        echo -e "\e[34m[DEBUG] $@"
+    fi
+}
+log_info() {
+    if [ $LOG_LEVEL -ge 1 ];then
+        echo -e "\e[39m[INFO] $@"
+    fi
+}
+log_warn() {
+    if [ $LOG_LEVEL -ge 0 ];then
+        echo -e "\e[33m[WARN] $@"
+    fi
+}
+log_error() {
+    echo -e "\e[31m[ERROR] $@"
+}
+
+# Function to compare version numbers
+vercomp () {
+    if [[ $1 == $2 ]]
+    then
+        echo "0"
+        return
+    fi
+    local IFS=.
+    local i ver1=($1) ver2=($2)
+    # fill empty fields in ver1 with zeros
+    for ((i=${#ver1[@]}; i<${#ver2[@]}; i++))
+    do
+        ver1[i]=0
+    done
+    for ((i=0; i<${#ver1[@]}; i++))
+    do
+        if [[ -z ${ver2[i]} ]]
+        then
+            # fill empty fields in ver2 with zeros
+            ver2[i]=0
+        fi
+        if ((10#${ver1[i]} > 10#${ver2[i]}))
+        then
+            echo "1"
+            return
+        return
+        fi
+        if ((10#${ver1[i]} < 10#${ver2[i]}))
+        then
+            echo "2"
+            return
+        fi
+    done
+    echo "0"
+}
+
+
+main() {
+
+  SSH_OPTIONS=" -i $PEM_LOCATION -o LogLevel=error -o PreferredAuthentications=publickey,gssapi-with-mic,keyboard-interactive,password"
+  SCP_OPTIONS="$SSH_OPTIONS"
+
+  if [ "$CONTROL_PERSIST" = true ] ; then
+      # Replace previous trap with extended command to clean up ssh master
+      trap "ssh -S $CONTROL_PERSIST_PATH -O exit 8.8.8.8 ; kill -s HUP -- -$$" SIGINT SIGTERM ERR EXIT
+      ssh -M -S $CONTROL_PERSIST_PATH $SSH_OPTIONS $USER@$HOST -N &
+      SSH_OPTIONS=" -S $CONTROL_PERSIST_PATH "
+      SCP_OPTIONS=" -o ControlPath=$CONTROL_PERSIST_PATH -o ControlPersist=900 -o ControlMaster=auto"
+  fi
+
+  if [ "$BACKUP" = true ] ; then
+      backup_prefix="backup"
+      BACKUP_NAME="${backup_prefix}.${INSTANCE}_custom_nars"
+      backup_count=2
+  
+      nars_dirs=`ssh $SSH_OPTIONS -t $USER@$HOST "ls -1 /opt" | grep ${INSTANCE} | grep -e "^backup.*"`
+      nars_dirs_formatted=()
+      for line in $nars_dirs; do
+          # Note line contains hidden characters that creates a cluster munge of things
+          # The below cleans it up.  Note for w.e. reason this must occur within the loop.
+          line=`echo "$line" | tr -dc '[:print:]'`
+          nars_dirs_formatted+=("$line")
+      done
+
+      conflict=true
+      while [ "$conflict" == "true" ] ; do
+          conflict=false
+          for i in "${!nars_dirs_formatted[@]}"; do
+              line="${nars_dirs_formatted[i]}"
+
+              if [ "$line" == "${BACKUP_NAME}" ] ; then
+                  # If a conflict occurs and we increment our backup
+                  # We do not need to check against the conflict anymore
+                  unset 'nars_dirs_formatted[i]'
+                  conflict=true
+                  break
+              fi
+          done
+
+          if [ "$conflict" == "true" ]; then
+              backup_count=$((backup_count+1))
+              BACKUP_NAME="${backup_prefix}${backup_count}.${INSTANCE}_custom_nars"
+          fi
+      done
+  
+      log_info "Setting up backup dir: /opt/$BACKUP_NAME"
+      ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"sudo cp -r /opt/${INSTANCE}_custom_nars /opt/${BACKUP_NAME}\""
+  fi
+
+  NAR_OUTPUT=$(find . -type f | grep -e ".nar$")
+  NARS=()
+  for nar in $NAR_OUTPUT; do
+    NARS+=("$nar")
+  done
+  
+
+  if [[ "${NARS[0]}" ]]; then
+    # Fix any permission issues ahead of time, note we can't chmod /path/* because that fails for empty directories
+    COMMAND="sudo chmod 775 /opt/${INSTANCE}_custom_nars"
+    COMMAND="$COMMAND && find /opt/${INSTANCE}_custom_nars/ -maxdepth 1 -type f | xargs -I {} sudo chmod 664 {} "
+    COMMAND="$COMMAND && sudo usermod -aG nifi $USER"
+    ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"$COMMAND\""
+
+    REMOTE_NARS=""
+    if [ "$REMOVE" == "true" ]; then
+        REMOTE_NARS=$(ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"ls -1 /opt/${INSTANCE}_custom_nars | grep -e '.*.nar$'\"")
+    fi
+ 
+    START_TIME="$SECONDS"
+    nar_upload_batch=()
+    nar_remove_batch=()
+    delete_nars=true
+    for i in "${!NARS[@]}"; do
+        if [[ "$i" -eq "$((${#NARS[@]} - 1))" ]]; then
+          # On the last one make sure we scp the nar_upload_batch.
+          MAX_BATCH_SIZE=0
+        fi
+        nar="${NARS[i]}"
+
+        log_debug " $i: file is [${nar}]"
+        if [ "$RESET" = true ] ; then
+            remote_nar=${nar##*/} # Get the basename of the file from the path
+        	  echo " Copy the back up from ${BACKUP_DIR}/${remote_nar} to remote /opt/${INSTANCE}_custom_nars/${remote_nar} "
+        	  # Assume the back up is there
+        	  ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"cp  ${BACKUP_DIR}/${remote_nar} /opt/${INSTANCE}_custom_nars \""
+        	  ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"mv ${BACKUP_DIR}/${remote_nar} ${BACKUP_DIR}/${remote_nar}.OLD \""
+        else
+
+            nar_upload_batch+=($nar)
+            nar_upload_batch_size="${#nar_upload_batch[@]}"
+            nar_list=""
+            delete_nars=false
+            if [[ "${#nar_upload_batch[@]}" -ge "$MAX_BATCH_SIZE" ]];then
+                nar_list=`printf '%s ' "${nar_upload_batch[@]}"`
+                nar_upload_batch=()
+                delete_nars=true
+            fi
+
+            # Upload files in parallel
+            if [ ! -z "$nar_list" ]; then
+              if [ "$DOWNLOAD_THREADS" -gt 1 ]; then
+                while [ `jobs | wc -l` -gt $DOWNLOAD_THREADS ]; do
+                  sleep 1
+                done
+    	        log_info "Uploading $nar_upload_batch_size nars: [${nar_list}] to ${USER}@${HOST}:/opt/${INSTANCE}_custom_nars"
+                # Note -o LogLevel=error supresses the banner, it is not a supported option on all Linux platforms.
+                /bin/bash -c "scp $SCP_OPTIONS $nar_list $USER@$HOST:/opt/${INSTANCE}_custom_nars && echo \"Uploading $nar complete.\"" &
+              else
+                scp $SCP_OPTIONS $nar_list $USER@$HOST:/opt/${INSTANCE}_custom_nars
+              fi
+            fi
+        fi
+  
+        # Find other nars with the same name but different version
+        if [ "$REMOVE" == "true" ]; then
+            nar_base=`basename $nar`
+            nar_version=`echo $nar_base | grep nar | cut -d '-' -f 2- | cut -d '.' -f -2`
+            nar_snapshot=`echo $nar_version | grep -q SNAPSHOT && echo 'true' || echo 'false'`
+            nar_version_count="-1.0"
+            if [ "$nar_snapshot" == "true" ]; then
+                nar_version_count=${nar_version%"-SNAPSHOT"}
+            else
+                nar_version_count="$nar_version"
+            fi
+            nar_name=`echo ${nar_base%"-${nar_version}.nar"} | rev | cut -d '/' -f1 | rev`
+  
+            log_trace "Nar: $nar_base, version: $nar_version_count, snapshot: $nar_snapshot, name: $nar_name"
+
+            FILTERED_REMOTE_NARS=(`eval "echo \"$REMOTE_NARS\" | grep -e \"^$nar_name\""`)
+            for remote_nar in $FILTERED_REMOTE_NARS; do  
+                remote_nar=`echo "$remote_nar" | tr -dc '[:print:]'`
+                remote_nar_base=`basename $remote_nar`
+  
+                remote_nar_version=`echo $remote_nar_base | grep nar | cut -d '-' -f 2- | cut -d '.' -f -2`
+                remote_nar_snapshot=`echo $remote_nar_version | grep -q SNAPSHOT && echo 'true' || echo 'false'`
+                remote_nar_version_count="-1.0"
+                if [ "$remote_nar_snapshot" == "true" ]; then
+                    remote_nar_version_count=${remote_nar_version%"-SNAPSHOT"}
+                else
+                    remote_nar_version_count="$remote_nar_version"
+                fi
+                remote_nar_name=`echo ${remote_nar_base%"-${remote_nar_version}.nar"} | rev | cut -d '/' -f1 | rev`
+ 
+                log_trace "Remote Nar: $remote_nar_base, version: $remote_nar_version_count, snapshot: $remote_nar_snapshot, name: $remote_nar_name"
+  
+                if [ "$remote_nar_name" == "$nar_name" ] && [ "$remote_nar_version" != "$nar_version" ]; then
+                    vercomp_result=$(vercomp "$remote_nar_version_count" "$nar_version_count")
+                    if [ "$vercomp_result" == "0" ]; then
+                        if [ "$nar_snapshot" == "false" ]; then
+                            log_trace "Will remove outdated nar: $remote_nar_base"
+                            nar_remove_batch+=($remote_nar_base)
+                            #ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"rm -f /opt/${INSTANCE}_custom_nars/$remote_nar_base\""
+                        else
+                            log_warn "A newer version of the uploaded nar $nar_name already exists on target system."
+                        fi
+                    elif [[ "$vercomp_result" == "2" ]]; then
+                        log_trace "Will remove outdated nar: $remote_nar_base"
+                        nar_remove_batch+=($remote_nar_base)
+                        #ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"rm -f /opt/${INSTANCE}_custom_nars/$remote_nar_base\""
+                    elif [[ "$vercomp_result" == "1" ]]; then
+                        log_warn "A newer version of the uploaded nar $nar_name already exists on target system."
+                    else
+                        log_error "Error comparing versions."
+                    fi
+                fi
+
+                nar_delete_batch_size="${#nar_remove_batch[@]}"
+                if [[ "$delete_nars" == "true" && "$nar_delete_batch_size" -gt "0" ]]; then
+                    delete_nar_command=`/bin/bash -c "printf '%s ' \"${nar_remove_batch[@]}\" | xargs -I {} echo ' {}' | sed 's| | ; rm -f /opt/${INSTANCE}_custom_nars/|g'"`
+                    delete_nar_list=`printf '%s ' "${nar_remove_batch[@]}"`
+
+                    log_info "Deleting $nar_delete_batch_size nars: [${delete_nar_list}] from ${USER}@${HOST}:/opt/${INSTANCE}_custom_nars"
+                    ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"test 0 ${delete_nar_command}\""
+                    nar_remove_batch=()
+                fi
+  
+            done
+            #echo "Done Remote Nars"
+            
+        fi
+    done
+    wait
+    ELAPSED_TIME=$(($SECONDS - $START_TIME))
+    echo ""
+    echo "Uploads completed in ${ELAPSED_TIME}s"
+    ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"sudo chown nifi:nifi /opt/${INSTANCE}_custom_nars/*\""
+  
+    if [ "$RESTART" = true ] ; then
+        ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"sudo rm -f /var/log/$INSTANCE/nifi-app.log* && sudo supervisorctl stop $INSTANCE\""
+        sleep 2s # Give NiFi a chance to fully shutdown
+  
+        timeout=""
+        if [ ! "$FOLLOW" = true ] ; then
+            timeout="timeout 15"
+        fi
+        ssh $SSH_OPTIONS -t $USER@$HOST "/bin/bash -c \"sudo supervisorctl start $INSTANCE && $timeout tail -F /var/log/$INSTANCE/nifi-app.log\""
+        if [[ "$?" -eq 124 ]] ; then
+          if [ ! "$FOLLOW" = true ] ; then
+            echo "Connection closed"
+          fi
+        fi
+    fi
+  else
+      echo "No nars found!"
+      exit 1
+  fi
+}
+
+main
+

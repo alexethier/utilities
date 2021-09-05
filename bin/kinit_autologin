@@ -1,4 +1,5 @@
 #!/bin/bash
+# This is a script to auto login to kinit - useful on corporate networks that support Kerberos authentication
 
 USER="$1"
 LOGIN_FILE="$2"

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Highly expiramental script to unzip a nested zip file, will unzip other found zipfiles recursively.
 
 TYPE=""
 FILTER=""

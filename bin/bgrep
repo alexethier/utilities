@@ -1,4 +1,5 @@
 #!/bin/bash
+# Prototype grep shortcut that finds lines of text between two search terms.
 
 # Defaults
 SEARCH=""

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Example way to parse bash arguments in a more general way.
 
 # Parse command line
 while [[ $# > 0 ]]

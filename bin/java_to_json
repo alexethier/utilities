@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Prototype script to quickly generate a json representation of a Java class
+# Note that certain IDEs have a better way to do this.
 
 echo "public String toJson() {"
 echo ""

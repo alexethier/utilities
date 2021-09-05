@@ -1,4 +1,7 @@
 #!/bin/bash
+# Prototype script for konnecting to K8 Pods.
+# Will try to find a running pod with matching name and automatically login to it.
+# Has options to copy in files or login as different users.
 
 POD_NAME=""
 USER=""

@@ -1,4 +1,8 @@
 #!/bin/bash
+# A prototype replacement for Node's Yarn tool.
+# Will skip the yarn build process if no file changes are detected.
+# It uses git-ls and md5 hashes to find if any source files changed.
+# The checksum file is stored in the node_modules directory.
 
 ARGS=()
 VERBOSE=false
