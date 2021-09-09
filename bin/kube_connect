@@ -7,6 +7,7 @@ POD_NAME=""
 USER=""
 COPY=""
 DESTINATION=""
+REMOVE="false"
 
 function help() {
     echo "Usage: kube_connect -n <pod_name> [ -u <username> ]"
@@ -14,6 +15,7 @@ function help() {
     echo " -u : Username for connection to pod."
     echo " -c <filename> : Path to file to copy into the container."
     echo " -d <destination> : Path inside pod where copied file is moved to."
+    echo " -r : Remove pod."
     echo " -v : Verbose log level."
 }
 
@@ -63,6 +65,12 @@ do
             DESTINATION="$value"
             shift
             ;;
+        -r)
+            REMOVE="true"
+            ;;
+        --remove)
+            REMOVE="true"
+            ;;
         -v)
             set -x
             ;;
@@ -103,6 +111,20 @@ mkdir -p ~/.aetmp
 echo "USER=$USER" > ~/.aetmp/kube_connect.txt
 echo "POD_NAME=$POD_NAME" >> ~/.aetmp/kube_connect.txt
 
+# Check number of inputs
+operations=0
+if [ "$REMOVE" == "true" ]; then
+  operations=$((operations+1))
+fi
+if [ -n "$COPY" ]; then
+  operations=$((operations+1))
+fi
+if [ "$operations" -gt 1 ]; then
+  echo "Too many operations requested."
+  exit 1
+fi
+
+# Main code block
 pod_id=`kubectl get pods | grep Running | cut -d' ' -f1 | grep "$POD_NAME"`
 if [ -z "$pod_id" ]; then
     echo "Could not find running pod with matching name $POD_NAME"
@@ -118,18 +140,11 @@ if [[ "$num_pods" != "1" ]]; then
     exit 1
 fi
 
-if [ ! -n "$COPY" ]; then
+if [ "$REMOVE" == "true" ]; then
+    kubectl delete pod $pod_id
+fi
 
-    if [ "$USER" == "root" ]; then
-        echo "Connecting to pod $pod_id as root"
-        kubectl exec --stdin --tty $pod_id -- /bin/bash
-    else
-        echo "Connecting to pod $pod_id as $USER"
-        kubectl exec --stdin --tty $pod_id -- /bin/bash -c "su $USER"
-    fi
-
-else
-
+if [ -n "$COPY" ]; then
     FILENAME=`basename $COPY`
 
     echo "Copying $COPY to $pod_id at temp path /tmp/$FILENAME"
@@ -143,5 +158,15 @@ else
         kubectl exec $pod_id -- /bin/bash -c "mv /tmp/$FILENAME $DESTINATION"
         kubectl exec $pod_id -- /bin/bash -c "ls -l $DESTINATION"
     fi
+fi
 
+if [ "$operations" -eq "0" ]; then
+
+    if [ "$USER" == "root" ]; then
+        echo "Connecting to pod $pod_id as root"
+        kubectl exec --stdin --tty $pod_id -- /bin/bash
+    else
+        echo "Connecting to pod $pod_id as $USER"
+        kubectl exec --stdin --tty $pod_id -- /bin/bash -c "su $USER"
+    fi
 fi
