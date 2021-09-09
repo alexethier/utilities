@@ -136,6 +136,11 @@ if [ "$operations" -gt 1 ]; then
 fi
 
 # Main code block
+if [ "$LIST" == "true" ]; then
+    kubectl get events --sort-by=".lastTimestamp" | grep "pod/$POD_NAME"
+    exit 0
+fi
+
 pod_id=`kubectl get pods | grep Running | cut -d' ' -f1 | grep "$POD_NAME"`
 if [ -z "$pod_id" ]; then
     echo "Could not find running pod with matching name $POD_NAME"
@@ -149,10 +154,6 @@ if [[ "$num_pods" != "1" ]]; then
     echo "Matched pod names"
     echo "$pod_id"
     exit 1
-fi
-
-if [ "$LIST" == "true" ]; then
-    kubectl get events --sort-by=".lastTimestamp" | grep "pod/$pod_id"
 fi
 
 if [ "$REMOVE" == "true" ]; then
