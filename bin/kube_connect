@@ -8,6 +8,7 @@ USER=""
 COPY=""
 DESTINATION=""
 REMOVE="false"
+LIST="false"
 
 function help() {
     echo "Usage: kube_connect -n <pod_name> [ -u <username> ]"
@@ -16,6 +17,7 @@ function help() {
     echo " -c <filename> : Path to file to copy into the container."
     echo " -d <destination> : Path inside pod where copied file is moved to."
     echo " -r : Remove pod."
+    echo " -l : List events."
     echo " -v : Verbose log level."
 }
 
@@ -71,6 +73,12 @@ do
         --remove)
             REMOVE="true"
             ;;
+        -l)
+            LIST="true"
+            ;;
+        --list)
+            LIST="true"
+            ;;
         -v)
             set -x
             ;;
@@ -119,6 +127,9 @@ fi
 if [ -n "$COPY" ]; then
   operations=$((operations+1))
 fi
+if [ "$LIST" == "true" ]; then
+  operations=$((operations+1))
+fi
 if [ "$operations" -gt 1 ]; then
   echo "Too many operations requested."
   exit 1
@@ -138,6 +149,10 @@ if [[ "$num_pods" != "1" ]]; then
     echo "Matched pod names"
     echo "$pod_id"
     exit 1
+fi
+
+if [ "$LIST" == "true" ]; then
+    kubectl get events --sort-by=".lastTimestamp" | grep "pod/$pod_id"
 fi
 
 if [ "$REMOVE" == "true" ]; then
