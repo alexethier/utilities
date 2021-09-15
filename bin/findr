@@ -3,10 +3,15 @@
 # Has options for copying matched files to target destination
 # Will remember the last match expression used
 
+set -e
+
 # Defaults
 EXPRESSION=""
 FILE_FILTER=" -type f "
+COPY=false
 COPY_LOCATION=""
+REMOTE=false
+REMOTE_LOCATION="" # An full scp command where the characters '{}' will be replaced by the filename.
 DELETE=false
 
 while [[ $# > 0 ]]
@@ -32,17 +37,37 @@ do
             shift
             ;;
         -c)
+            COPY="true"
             COPY_LOCATION=$value
             last_char="${COPY_LOCATION: -1}"
             while [ "$last_char" == "/" ] || [ "$last_char" == " " ]; do
               COPY_LOCATION=${COPY_LOCATION::-1}
               last_char="${COPY_LOCATION: -1}"
             done
-            shift
+            if [ -n "$COPY_LOCATION" ]; then
+              shift
+            fi
             ;;
         --copy)
+            COPY="true"
             COPY_LOCATION="$value"
-            shift
+            if [ ! -n "$COPY_LOCATION" ]; then
+              shift
+            fi
+            ;;
+        -r)
+            REMOTE="true"
+            REMOTE_LOCATION="$value"
+            if [ -n "$REMOTE_LOCATION" ]; then
+              shift
+            fi
+            ;;
+        --remote)
+            REMOTE="true"
+            REMOTE_LOCATION="$value"
+            if [ ! -n "$REMOTE_LOCATION" ]; then
+              shift
+            fi
             ;;
         -d)
             DELETE=true
@@ -65,45 +90,59 @@ if [ -f ~/.aetmp/findr.txt ]; then
     if [ ! -n "$EXPRESSION" ]; then
         EXPRESSION=`cat ~/.aetmp/findr.txt | grep "EXPRESSION" | cut -d '=' -f2`
     fi
+
+    if [[ "$COPY" == "true" && ! -n "$COPY_LOCATION" ]]; then
+        COPY_LOCATION=`cat ~/.aetmp/findr.txt | grep "COPY_LOCATION" | cut -d '=' -f2`
+    fi
+    if [[ "$REMOTE" == "true" && ! -n "$REMOTE_LOCATION" ]]; then
+        REMOTE_LOCATION=`cat ~/.aetmp/findr.txt | grep "REMOTE_LOCATION" | cut -d '=' -f2`
+    fi
+fi
+
+if [[ "$REMOTE" == true && "$REMOTE_LOCATION" != *"{}"* ]]; then
+  echo "Remote command: $REMOTE_LOCATION must contain '{}' substitution characters."
+  exit 1
 fi
 
 if [ ! -n "$EXPRESSION" ]; then
-    echo "Unable to determine expression"
-    exit 1
+  echo "Unable to determine expression"
+  exit 1
 fi
 
 mkdir -p ~/.aetmp
 echo "EXPRESSION=$EXPRESSION" > ~/.aetmp/findr.txt
+if [ ! -n "$COPY_LOCATION" ]; then
+  echo "COPY_LOCATION=$COPY_LOCATION" >> ~/.aetmp/findr.txt
+fi
+if [ ! -n "$REMOTE_LOCATION" ]; then
+  echo "REMOTE_LOCATION=$REMOTE_LOCATION" >> ~/.aetmp/findr.txt
+fi
 
-#POSTFIX=""
-#if [ -n "$COPY_LOCATION" ]; then
-#  mkdir -p $COPY_LOCATION
-#  echo "Copying to $COPY_LOCATION"
-#  POSTFIX="$POSTFIX | xargs -I {} /bin/bash -cx \"cp {} $COPY_LOCATION/\""
-#fi
-#
-#COMMAND="find . $FILE_FILTER | grep -e $EXPRESSION $POSTFIX"
-#eval $COMMAND
+if [[ "$COPY" == "true" && ! -n "$COPY_LOCATION" ]]; then
+  echo "Copy specified but no copy location"
+  exit 1
+fi
+
+if [[ "$REMOTE" == "true" && ! -n "$REMOTE_LOCATION" ]]; then
+  echo "Remote copy specified but no remote location"
+  exit 1
+fi
 
 FILES=`find . $FILE_FILTER | grep -e $EXPRESSION`
-#for file in $FILES; do
-#    echo $file
-#    
-#    #if [ -n "$COPY_LOCATION" ]; then
-#    #  echo "Copying $file to $COPY_LOCATION"
-#    #  cp $file $COPY_LOCATION/
-#    #fi
-#
-#    if [ "$DELETE" == "true" ]; then
-#      rm $file
-#    fi
-#done
 
 print=true
 
-if [ -n "$COPY_LOCATION" ]; then
+if [ "$COPY" == "true" ]; then
   for file in $FILES; do
     eval "/bin/bash -cx \"cp $file $COPY_LOCATION/\""
+  done
+  print=false
+fi
+
+if [ "$REMOTE" == "true" ]; then
+  for file in $FILES; do
+    remote_command=`echo "$REMOTE_LOCATION" | sed "s|{}|$file|g"`
+    eval "/bin/bash -cx \"${remote_command}\""
   done
   print=false
 fi
