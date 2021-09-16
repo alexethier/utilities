@@ -9,6 +9,8 @@ COPY=""
 DESTINATION=""
 REMOVE="false"
 LIST="false"
+EXECUTE="false"
+EXECUTE_COMMAND=""
 
 function help() {
     echo "Usage: kube_connect -n <pod_name> [ -u <username> ]"
@@ -18,6 +20,7 @@ function help() {
     echo " -d <destination> : Path inside pod where copied file is moved to."
     echo " -r : Remove pod."
     echo " -l : List events."
+    echo " -e : Execute command."
     echo " -v : Verbose log level."
 }
 
@@ -79,6 +82,20 @@ do
         --list)
             LIST="true"
             ;;
+        -e)
+            EXECUTE="true"
+            EXECUTE_COMMAND="$value"
+            if [ -n "$EXECUTE_COMMAND" ]; then
+              shift
+            fi
+            ;;
+        --execute)
+            EXECUTE="true"
+            EXECUTE_COMMAND="$value"
+            if [ -n "$EXECUTE_COMMAND" ]; then
+              shift
+            fi
+            ;;
         -v)
             set -x
             ;;
@@ -102,6 +119,9 @@ if [ -f ~/.aetmp/kube_connect.txt ]; then
     fi
     if [ ! -n "$POD_NAME" ]; then
         POD_NAME=`cat ~/.aetmp/kube_connect.txt | grep "POD_NAME" | cut -d '=' -f2`
+    fi
+    if [[ "$EXECUTE" == "true" && ! -n "$REMOTE_LOCATION" ]]; then
+        REMOTE_LOCATION=`cat ~/.aetmp/kube_connect.txt | grep "REMOTE_LOCATION" | cut -d '=' -f2`
     fi
 fi
 
@@ -130,6 +150,7 @@ fi
 if [ "$LIST" == "true" ]; then
   operations=$((operations+1))
 fi
+# Note that EXECUTE intentionally does not increment the operations count.
 if [ "$operations" -gt 1 ]; then
   echo "Too many operations requested."
   exit 1
@@ -173,6 +194,21 @@ if [ -n "$COPY" ]; then
         echo "Moving $FILENAME inside pod to $DESTINATION"
         kubectl exec $pod_id -- /bin/bash -c "mv /tmp/$FILENAME $DESTINATION"
         kubectl exec $pod_id -- /bin/bash -c "ls -l $DESTINATION"
+    fi
+fi
+
+if [ "$EXECUTE" == "true" ]; then
+    if [ "$USER" == "root" ]; then
+        echo "Connecting to pod $pod_id as root"
+        kubectl exec --stdin --tty $pod_id -- $EXECUTE_COMMAND
+    else
+        echo "Connecting to pod $pod_id as $USER"
+        kubectl exec --stdin --tty $pod_id -- su $USER -c "$EXECUTE_COMMAND"
+    fi
+
+    if [ "$operations" -eq "0" ]; then
+      # If only execute is called, increment the operation count
+      operations=$((operations+1))
     fi
 fi
 
