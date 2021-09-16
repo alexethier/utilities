@@ -65,7 +65,7 @@ do
         --remote)
             REMOTE="true"
             REMOTE_LOCATION="$value"
-            if [ ! -n "$REMOTE_LOCATION" ]; then
+            if [ -n "$REMOTE_LOCATION" ]; then
               shift
             fi
             ;;
@@ -128,6 +128,7 @@ if [[ "$REMOTE" == "true" && ! -n "$REMOTE_LOCATION" ]]; then
   exit 1
 fi
 
+## Main Func.
 FILES=`find . $FILE_FILTER | grep -e $EXPRESSION`
 
 print=true
