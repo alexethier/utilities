@@ -118,17 +118,19 @@ fi
 mkdir -p ~/.aetmp
 touch ~/.aetmp/findr.txt
 echo "EXPRESSION=$EXPRESSION" > ~/.aetmp/tmp.findr.txt
+set +e # the grep -e breaks super hard and no, the '; true' doesn't work.
 if [ -n "$COPY_LOCATION" ]; then
   echo "COPY_LOCATION=$COPY_LOCATION" >> ~/.aetmp/tmp.findr.txt
 else
-  cat ~/.aetmp/findr.txt | grep -e "^COPY_LOCATION" ; true >> ~/.aetmp/tmp.findr.txt
+  cat ~/.aetmp/findr.txt | grep -e "^COPY_LOCATION" >> ~/.aetmp/tmp.findr.txt
 fi
 if [ -n "$REMOTE_LOCATION" ]; then
   echo "REMOTE_LOCATION=$REMOTE_LOCATION" >> ~/.aetmp/tmp.findr.txt
 else
   echo "Copying to remote"
-  cat ~/.aetmp/findr.txt | grep -e "^REMOTE_LOCATION" ; true >> ~/.aetmp/tmp.findr.txt
+  cat ~/.aetmp/findr.txt | grep -e "^REMOTE_LOCATION" >> ~/.aetmp/tmp.findr.txt
 fi
+set -e
 mv ~/.aetmp/tmp.findr.txt ~/.aetmp/findr.txt
 
 if [[ "$COPY" == "true" && ! -n "$COPY_LOCATION" ]]; then
