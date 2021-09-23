@@ -158,7 +158,7 @@ fi
 
 # Main code block
 if [ "$LIST" == "true" ]; then
-    kubectl get events --sort-by=".lastTimestamp" | grep "pod/$POD_NAME"
+    kubectl get events --sort-by=".lastTimestamp" | grep -e "pod/.*${POD_NAME}"
     exit 0
 fi
 
