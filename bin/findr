@@ -111,10 +111,10 @@ fi
 
 mkdir -p ~/.aetmp
 echo "EXPRESSION=$EXPRESSION" > ~/.aetmp/findr.txt
-if [ ! -n "$COPY_LOCATION" ]; then
+if [ -n "$COPY_LOCATION" ]; then
   echo "COPY_LOCATION=$COPY_LOCATION" >> ~/.aetmp/findr.txt
 fi
-if [ ! -n "$REMOTE_LOCATION" ]; then
+if [ -n "$REMOTE_LOCATION" ]; then
   echo "REMOTE_LOCATION=$REMOTE_LOCATION" >> ~/.aetmp/findr.txt
 fi
 
