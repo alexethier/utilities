@@ -78,6 +78,12 @@ do
         --no-filter)
             FILE_FILTER=""
             ;;
+        -v)
+            set -x
+            ;;
+        --verbose)
+            set -x
+            ;;
         *)
             echo "Unknown option passed: $key"
             exit 1
@@ -110,13 +116,20 @@ if [ ! -n "$EXPRESSION" ]; then
 fi
 
 mkdir -p ~/.aetmp
-echo "EXPRESSION=$EXPRESSION" > ~/.aetmp/findr.txt
+touch ~/.aetmp/findr.txt
+echo "EXPRESSION=$EXPRESSION" > ~/.aetmp/tmp.findr.txt
 if [ -n "$COPY_LOCATION" ]; then
-  echo "COPY_LOCATION=$COPY_LOCATION" >> ~/.aetmp/findr.txt
+  echo "COPY_LOCATION=$COPY_LOCATION" >> ~/.aetmp/tmp.findr.txt
+else
+  cat ~/.aetmp/findr.txt | grep -e "^COPY_LOCATION" ; true >> ~/.aetmp/tmp.findr.txt
 fi
 if [ -n "$REMOTE_LOCATION" ]; then
-  echo "REMOTE_LOCATION=$REMOTE_LOCATION" >> ~/.aetmp/findr.txt
+  echo "REMOTE_LOCATION=$REMOTE_LOCATION" >> ~/.aetmp/tmp.findr.txt
+else
+  echo "Copying to remote"
+  cat ~/.aetmp/findr.txt | grep -e "^REMOTE_LOCATION" ; true >> ~/.aetmp/tmp.findr.txt
 fi
+mv ~/.aetmp/tmp.findr.txt ~/.aetmp/findr.txt
 
 if [[ "$COPY" == "true" && ! -n "$COPY_LOCATION" ]]; then
   echo "Copy specified but no copy location"
