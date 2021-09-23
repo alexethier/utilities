@@ -1,0 +1,32 @@
+#!/bin/bash
+
+ssh_connect="$1"
+ssh_command="${@:2}"
+
+if [ ! -n "$ssh_connect" ]; then
+  ssh_connect=`cat ~/.aetmp/sshc.txt | grep "CONNECT" | cut -d '=' -f2-`
+fi
+
+if [ ! -n "$ssh_command" ]; then
+  ssh_command=`cat ~/.aetmp/sshc.txt | grep "COMMAND" | cut -d '=' -f2-`
+fi
+
+if [ ! -n "$ssh_connect" ];then
+  echo "Could not load ssh connect config."
+  exit 1
+fi
+if [ ! -n "$ssh_command" ];then
+  echo "Could not load ssh command config."
+  exit 1
+fi
+
+mkdir -p ~/.aetmp
+echo "CONNECT=$ssh_connect" > ~/.aetmp/sshc.txt
+echo "COMMAND=$ssh_command" >> ~/.aetmp/sshc.txt
+
+# A primitive way to escape " characters
+ssh_command="$(echo $ssh_command | sed 's/"/\\"/g')"
+full_command="ssh -t $ssh_connect /bin/bash -c \"eval source ~/.bash_profile ; $ssh_command\""
+echo "evaluating command: |$full_command|"
+echo ""
+eval "$full_command"
