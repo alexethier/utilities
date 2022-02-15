@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# This script will attempt to parse the input text into multiple output formats.
+
+input="$1"
+
+# Convert json list to new format
+format=`echo "$input" | sed 's/\[//g' | sed 's/\]//g' | sed "s/'//g" | sed 's/,/ /g' | sed 's/  / /g'`
+echo ""
+echo ""
+echo "Format 1 (converts json to flat list):"
+echo "$format"
+
+# Reuse 'format' variable to keep memory footprint low
+format=`echo "$input" | sed "s/'/\"/g" | sed 's/None/null/g' | sed 's/True/true/g' | sed 's/False/false/g'`
+echo ""
+echo ""
+echo "Format 2 (Converts Python output to Json Dict):"
+echo "$format"

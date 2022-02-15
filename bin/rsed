@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Recursive sed for MacOS
+# It will operate on all files contained in the current working directory.
+
+SUFFIX=".tmp.delme.bak"
+find . -type f | xargs -I {} /bin/bash -c "sed -i'$SUFFIX' -e '$1' {} ; rm -f {}$SUFFIX"

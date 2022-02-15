@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prototype script that launches, runs, and connects to the most recently built docker image.
+# This script will find the latest docker image,  launch a new container from it, and connect to that container.
 
 ROOT=true
 
@@ -9,20 +9,15 @@ do
     key="$1"
     value="$2"
 
-    # If arguments come in the form a=b
-    if [[ $1 == *'='* ]]
-    then
-        IFS='=' read -ra key_pair <<< "$1"
-        key="${key_pair[0]}"
-        value="${key_pair[1]}"
-    fi
-
     case $key in
         --noroot)
             ROOT=false
             ;;
         --no-root)
             ROOT=false
+            ;;
+        -v)
+            set -x
             ;;
         *)
             echo "Unknown option passed: $key"
