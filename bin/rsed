@@ -1,4 +1,6 @@
 #!/bin/bash
+set -eu -o pipefail
+IFS=$'\n\t'
 
 # Recursive sed for MacOS
 # It will operate on all files contained in the current working directory.

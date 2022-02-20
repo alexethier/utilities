@@ -1,4 +1,11 @@
 #!/bin/bash
+
+# Example bash boilerplate to create clean scripts.
+set -eu -o pipefail
+IFS=$'\n\t'
+
+cd $(readlink -f "$(dirname "$0")") # Example command to move to dir containing script.
+
 # Example way to parse bash arguments in a more general way.
 
 # Parse command line
