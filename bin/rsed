@@ -1,9 +1,67 @@
 #!/bin/bash
-set -eu -o pipefail
+set -e -o pipefail
 IFS=$'\n\t'
+
+print_help () {
+  echo ""
+  echo "rsed will run a sed find and replace recursively on all files in the current directory."
+  echo ""
+  echo "Usage: rsed 's/find/replace/g'"
+}
+
+EXPRESSION="$1"
+NUM_ARGS="$#"
+
+#echo "$NUM_ARGS || $1"
+#if [[ "$NUM_ARGS" != "1" ]]; then
+#  echo "num args help"
+#fi
+#if [[ $1 = -* ]]; then
+#  echo "dash help"
+#fi
+
+if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
+
+    EXPRESSION=""
+
+    # Parse command line
+    while [[ $# > 0 ]]
+    do
+        key="$1"
+        value="$2"
+    
+        case $key in
+            -h)
+                print_help
+                ;;
+            --help)
+                print_help
+                ;;
+            -e)
+                EXPRESSION="$value"
+                shift
+                ;;
+            --expression)
+                EXPRESSION="$value"
+                shift
+                ;;
+            -v)
+                set -x
+                ;;
+            *)
+                echo "Unknown option passed: $key"
+                print_help
+                exit 1
+                ;;
+        esac
+        shift
+    done
+fi
 
 # Recursive sed for MacOS
 # It will operate on all files contained in the current working directory.
 
-SUFFIX=".tmp.delme.bak"
-find . -type f | xargs -I {} /bin/bash -c "sed -i'$SUFFIX' -e '$1' {} ; rm -f {}$SUFFIX"
+if [ "$EXPRESSION" != "" ]; then
+    SUFFIX=".tmp.delme.bak"
+    find . -type f | xargs -I {} /bin/bash -c "sed -i'$SUFFIX' -e '$EXPRESSION' {} ; rm -f {}$SUFFIX"
+fi
