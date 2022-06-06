@@ -12,18 +12,20 @@ cd $(readlink -f "$(dirname "$0")") # Example command to move to dir containing 
 while [[ $# > 0 ]]
 do
     key="$1"
+    set +u
     value="$2"
+    set -u
 
-    # If arguments come in the form a=b
-    if [[ $1 == *'='* ]]
-    then
-        IFS='=' read -ra key_pair <<< "$1"
-        key="${key_pair[0]}"
-        value="${key_pair[1]}"
-    fi
+    ## If arguments come in the form a=b
+    #if [[ $1 == *'='* ]]
+    #then
+    #    IFS='=' read -ra key_pair <<< "$1"
+    #    key="${key_pair[0]}"
+    #    value="${key_pair[1]}"
+    #fi
 
-    echo "debug -- KEY IS |$key|"
-    echo "debug -- VALUE IS |$value|"
+    #echo "debug -- KEY IS |$key|"
+    #echo "debug -- VALUE IS |$value|"
 
     case $key in
         --example-two)
