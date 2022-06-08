@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Script to automate modification of DataBrick's objects based on the REST api: https://docs.databricks.com/dev-tools/api/
-# Not the Python client did not work for reasons unknown.
+# Note the Python client did not work for me.
 
-# Requires jq - $ pip install jq
+# Requires jq - $ brew install jq
 
 set -e -o pipefail
 IFS=$'\n\t'

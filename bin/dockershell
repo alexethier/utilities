@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eu -o pipefail
+set -e 
 IFS=$'\n\t'
 
 # This script will find the latest docker image,  launch a new container from it, and connect to that container.
@@ -40,7 +40,7 @@ ROOT_CMD=""
 if [ "$ROOT" = true ] ; then
     ROOT_CMD="--user root"
 fi
-CONT_ID=`docker run -idt $ROOT_CMD $IMAGE_ID /bin/bash`
+CONT_ID=`eval "docker run -idt ${ROOT_CMD} $IMAGE_ID /bin/bash"`
 
 
 function clean {
