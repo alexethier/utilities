@@ -2,6 +2,10 @@
 set -e -o pipefail
 IFS=$'\n\t'
 
+# Recursive sed for MacOS
+# It will operate on all files contained in the current working directory.
+# Unless filepaths are supplied via stdin
+
 print_help () {
   echo ""
   echo "rsed will run a sed find and replace recursively on all files in the current directory."
@@ -11,14 +15,7 @@ print_help () {
 
 EXPRESSION="$1"
 NUM_ARGS="$#"
-
-#echo "$NUM_ARGS || $1"
-#if [[ "$NUM_ARGS" != "1" ]]; then
-#  echo "num args help"
-#fi
-#if [[ $1 = -* ]]; then
-#  echo "dash help"
-#fi
+STDIN="false"
 
 if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
 
@@ -58,10 +55,21 @@ if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
     done
 fi
 
-# Recursive sed for MacOS
-# It will operate on all files contained in the current working directory.
+apply_sed () {
+  filepath="$1"
 
-if [ "$EXPRESSION" != "" ]; then
-    SUFFIX=".tmp.delme.bak"
-    find . -type f | xargs -I {} /bin/bash -c "sed -i'$SUFFIX' -e '$EXPRESSION' {} ; rm -f {}$SUFFIX"
+  if [ "$EXPRESSION" != "" ]; then
+      SUFFIX=".tmp.delme.bak"
+      find $filepath -type f | xargs -I {} /bin/bash -c "sed -i'$SUFFIX' -e '$EXPRESSION' {} ; rm -f {}$SUFFIX"
+  fi
+}
+
+while test ! -t 0 ; do
+  read -r stdin
+  STDIN="true"
+  apply_sed "$stdin"
+done
+
+if [[ "$STDIN" == "false" ]]; then
+  apply_sed "."
 fi
