@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+
+# This script formats log files that consist of json outputs
+# It will unnest embedded json and expand newlines
+# Usage: <some_program_which_streams_out_json_logs> | json_extractor
+
+import sys
+import json
+
+def is_json(input_str):
+  try:
+    input_json = json.loads(input_str)
+    if isinstance(input_json, dict) or isinstance(input_json, list):
+      return input_json
+  except ValueError as e:
+    pass
+  return False
+
+def get_components(input_json):
+  if isinstance(input_json, dict):
+    for key in input_json:
+      yield input_json[key]
+  elif isinstance(input_json, list):
+    for val in input_json:
+      yield val
+  
+def extract(input_str):
+  input_json = is_json(input_str)
+  if input_json:
+    for component in get_components(input_json):
+      if isinstance(component, str) and is_json(component):
+        yield "---- EXTRACTED START ----"
+        yield component
+        yield "---- EXTRACTED DONE -----"
+        extract(component)
+
+    # Make json pretty
+    pretty_json = json.dumps(input_json, indent=4)
+    # If json values have any embedded new line symbols, convert them into new lines.
+    for item in pretty_json.split(sep='\\n'):
+      yield item
+  else:
+    yield input_str
+        
+
+def main():
+
+  for raw_line in sys.stdin:
+    line = raw_line.rstrip('\n')
+    for value in extract(line):
+      print(value)
+
+main()
