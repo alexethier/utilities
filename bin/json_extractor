@@ -29,6 +29,7 @@ def extract(input_str):
   if input_json:
     for component in get_components(input_json):
       if isinstance(component, str) and is_json(component):
+        # TODO: Rather than printing an 'EXTRACTED' section, the extracted json should be added back to the original json
         yield "---- EXTRACTED START ----"
         yield component
         yield "---- EXTRACTED DONE -----"
