@@ -6,10 +6,15 @@
 
 import sys
 import json
+import argparse
 
-def is_json(input_str):
+def coerce_json(input_val):
+  if isinstance(input_val, dict):
+    return input_val
+  if isinstance(input_val, list):
+    return input_val
   try:
-    input_json = json.loads(input_str)
+    input_json = json.loads(input_val)
     if isinstance(input_json, dict) or isinstance(input_json, list):
       return input_json
   except ValueError as e:
@@ -25,30 +30,83 @@ def get_components(input_json):
       yield val
   
 def extract(input_str):
-  input_json = is_json(input_str)
+  input_json = coerce_json(input_str)
   if input_json:
-    for component in get_components(input_json):
-      if isinstance(component, str) and is_json(component):
-        # TODO: Rather than printing an 'EXTRACTED' section, the extracted json should be added back to the original json
-        yield "---- EXTRACTED START ----"
-        yield component
-        yield "---- EXTRACTED DONE -----"
-        extract(component)
 
-    # Make json pretty
-    pretty_json = json.dumps(input_json, indent=4)
-    # If json values have any embedded new line symbols, convert them into new lines.
-    for item in pretty_json.split(sep='\\n'):
-      yield item
+    if isinstance(input_json, dict):
+      for key in input_json:
+        component = input_json[key]
+        if isinstance(component, str):
+          component_json = coerce_json(component)
+          if component_json:
+            component_extracted, is_json = extract(component_json)
+            input_json[key] = component_extracted
+    elif isinstance(input_json, list):
+      for index in range(0, len(input_json)):
+        component = input_json[index]
+        if isinstance(component, str):
+          component_json = coerce_json(component)
+          if component_json:
+            component_extracted, is_json = extract(component_json)
+            input_json[index] = component_extracted
+
+    return input_json, True
   else:
-    yield input_str
+    return input_str, False
         
+def format_json(input_val):
+  if isinstance(input_val , dict) or isinstance(input_val, list):
+    return json.dumps(input_val, indent=4)
+  else:
+    return input_val
+  
+def get_keys(input_json, keys):
+  if isinstance(input_json, dict):
+    for key in keys:
+      if key in input_json:
+        return input_json[key]
+    for key in input_json:
+      found = get_keys(input_json[key], keys)
+      if found:
+        return found
+  elif isinstance(input_json, list):
+    for item in input_json:
+      found = get_keys(item, keys)
+      if found:
+        return found
+  return None
 
 def main():
 
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--no-split-lines", help="Do not split new lines.", action="store_true")
+  parser.add_argument("--key", help="If a line is json containing a key, only print the value of the key", action='append')
+  args = vars(parser.parse_args())
+
   for raw_line in sys.stdin:
     line = raw_line.rstrip('\n')
-    for value in extract(line):
-      print(value)
+    extracted = None
+    is_json = False
+    try:
+      extracted, is_json = extract(line)
+    except:
+      print("[ERROR]: Extract failed to parse line:")
+      print(line)
+
+    if extracted:
+      output = extracted
+      if is_json:
+        if args['key']:
+          output_val = get_keys(extracted, args['key'])
+          if output_val:
+            output = output_val
+
+      formatted_output = format_json(output)
+
+      if not args['no_split_lines']:
+        for output_line in formatted_output.split(sep='\\n'):
+          print(output_line)
+      else:
+        print(output)
 
 main()
