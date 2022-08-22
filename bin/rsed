@@ -10,12 +10,15 @@ print_help () {
   echo ""
   echo "rsed will run a sed find and replace recursively on all files in the current directory."
   echo ""
-  echo "Usage: rsed 's/find/replace/g'"
+  echo "Basic usage: rsed 's/find/replace/g'"
+  echo ""
+  echo "Advanced usage: rsed -e 's/find/replace/g' -d '/path/to/dir'"
 }
 
 EXPRESSION="$1"
 NUM_ARGS="$#"
 STDIN="false"
+SED_DIR="."
 
 if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
 
@@ -42,6 +45,15 @@ if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
                 EXPRESSION="$value"
                 shift
                 ;;
+            -d)
+                # Right trim '/'
+                SED_DIR="$value"
+                shift
+                ;;
+            --dir)
+                SED_DIR="$value"
+                shift
+                ;;
             -v)
                 set -x
                 ;;
@@ -55,12 +67,22 @@ if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
     done
 fi
 
+# Fix sed_dir
+last_sed_dir_char=`echo "$SED_DIR" | rev | cut -c -1`
+if [ "$last_sed_dir_char" == "/" ]; then
+    SED_DIR=`echo $SED_DIR | rev | cut -c 2- | rev`
+fi
+
 apply_sed () {
   filepath="$1"
 
   if [ "$EXPRESSION" != "" ]; then
       SUFFIX=".tmp.delme.bak"
-      find $filepath -type f | xargs -I {} /bin/bash -c "sed -i'$SUFFIX' -e '$EXPRESSION' {} ; rm -f {}$SUFFIX"
+      files=`find $filepath -type f`
+      for path in $files; do
+          sed -i"$SUFFIX" -e "$EXPRESSION" $path
+          rm -f "${path}${SUFFIX}"
+      done
   fi
 }
 
@@ -71,5 +93,5 @@ while test ! -t 0 ; do
 done
 
 if [[ "$STDIN" == "false" ]]; then
-  apply_sed "."
+  apply_sed "${SED_DIR}"
 fi
