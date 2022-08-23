@@ -1,0 +1,93 @@
+#!/bin/bash
+# Wrapper around curl to quickly make post requests with json body.
+
+# Defaults
+ARG1="$1"
+ARG2="$2"
+NUM_ARGS="$#"
+
+INPUT=""
+URL=""
+TYPE=""
+
+# Parse command line
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        --url)
+            URL=$value
+            shift
+            ;;
+        -u)
+            URL=$value
+            shift
+            ;;
+        --json_string)
+            TYPE="json_string"
+            INPUT=$value
+            shift
+            ;;
+        -j)
+            TYPE="json_string"
+            INPUT=$value
+            shift
+            ;;
+        --data)
+            TYPE="json_string"
+            INPUT=$value
+            shift
+            ;;
+        -d)
+            TYPE="json_string"
+            INPUT=$value
+            shift
+            ;;
+        --json_file)
+            TYPE="json_file"
+            INPUT=$value
+            shift
+            ;;
+        -f)
+            TYPE="json_file"
+            INPUT=$value
+            shift
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            ;;
+    esac
+    shift
+done
+
+if [[ "$URL" == "" && "$INPUT" == "" && "$NUM_ARGS" -eq 2 ]]; then
+    INPUT="$ARG1"
+    URL="$ARG2"
+fi
+
+if [ "$URL" == "" ]; then
+    echo "Provide a url with -u"
+    exit 1
+fi
+
+if [ "$TYPE" == "" ];then
+    TYPE="json_file"
+
+    input_type=`echo $INPUT | jq -r 'type' 2>/dev/null`
+    if [[ "$input_type" == "object" || "$input_type" == "array" ]]; then
+        TYPE="json_string"
+    fi
+fi
+
+if [ "$TYPE" == "json_string" ]; then
+    curl -H "Content-Type: application/json" -d $INPUT $URL
+elif [ "$TYPE" == "json_file" ]; then
+    curl -H "Content-Type: application/json" --data-binary "@${INPUT}" $URL
+else
+    echo "Bad type $TYPE"
+    exit 1
+fi
