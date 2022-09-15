@@ -7,8 +7,56 @@ import sys
 import argparse
 import os
 
-def parse_headers(header_line):
-  return header_line.split(',')
+def parse_csv_line(line):
+  return line.split(',')
+
+def process_header(line, add_args, delete_column_names):
+  new_headers_set = set()
+  delete_indicies = []
+
+  headers = parse_csv_line(line)
+  headers_set = set(headers)
+  if delete_column_names:
+    for delete_column_name in delete_column_names:
+      match = False
+      for i in range(0,len(headers)):
+        if headers[i] == delete_column_name:
+          delete_indicies.append(i)
+          match = True
+      if not match:
+        raise Exception(f"No header for delete column: {delete_column_name}" + os.linesep)
+  delete_indicies.sort(reverse = True)
+
+  output_headers = headers
+
+  # Handle delete columns
+  for delete_index in delete_indicies:
+    output_headers = output_headers[0:delete_index] + output_headers[delete_index+1:]
+
+  # Handle add columns
+  for add_arg in add_args:
+    new_column_name = add_arg[0]
+    if new_column_name in headers_set or new_column_name in new_headers_set:
+      raise Exception(f"Duplicate header name already exists: {new_column_name}" + os.linesep)
+
+    output_headers.append(new_column_name)
+    new_headers_set.add(new_column_name)
+
+  return headers, output_headers, delete_indicies
+
+def process_row(line, add_args, delete_indicies):
+  output_vals = parse_csv_line(line)
+
+  # Handle delete columns
+  for delete_index in delete_indicies:
+    output_vals = output_vals[0:delete_index] + output_vals[delete_index+1:]
+
+  # Handle add columns
+  for add_arg in add_args:
+    output_vals.append(add_arg[1])
+
+  return output_vals
+
 
 def main():
 
@@ -16,11 +64,17 @@ def main():
   parser.add_argument("-a","--add", help="Adds a new column with default value.", nargs=2, action='append')
   parser.add_argument("-d","--delete", help="Deletes a column with default value.", action='append')
   parser.add_argument("-p","--print", help="Print input headers to stderr.", action="store_true")
+
+  add_args = []
+  delete_column_names = []
   args = vars(parser.parse_args())
+  if args["add"]:
+    add_args.extend(args["add"])
+  if args["delete"]:
+    delete_column_names.extend(args["delete"])
 
   first = True
   headers = []
-  new_headers_set = set()
   delete_indicies = []
 
   for raw_line in sys.stdin:
@@ -28,59 +82,18 @@ def main():
 
     # Process header
     if first:
-      headers = parse_headers(line)
-      headers_set = set(headers)
-      if args["delete"]:
-        for delete_column_name in args["delete"]:
-          match = False
-          for i in range(0,len(headers)):
-            if headers[i] == delete_column_name:
-              delete_indicies.append(i)
-              match = True
-          if not match:
-            sys.stderr.write(f"No header for delete column: {delete_column_name}" + os.linesep)
-            sys.exit(1)
-      delete_indicies.sort(reverse = True)
-
-      output_headers = headers
-
-      # Handle delete columns
-      for delete_index in delete_indicies:
-        output_headers = output_headers[0:delete_index] + output_headers[delete_index+1:]
-
-      # Handle add columns
-      if args["add"]:
-        for add_args in args["add"]:
-          new_column_name = add_args[0]
-          if new_column_name in headers_set or new_column_name in new_headers_set:
-            sys.stderr.write(f"Duplicate header name already exists: {new_column_name}" + os.linesep)
-            sys.exit(1)
-          output_headers.append(new_column_name)
-          new_headers_set.add(new_column_name)
+      first = False
+      headers, output_headers, delete_indicies = process_header(line, add_args, delete_column_names)
 
       if args["print"]:
         sys.stderr.write(", ".join(headers) + os.linesep)
 
-      first = False
       print(",".join(output_headers))
-      continue
 
-    # Process the rest
-    if not args["add"] and not args["delete"]:
+    elif add_args or delete_column_names: 
+      output_vals = process_row(line, add_args, delete_indicies)
+      print(",".join(output_vals))
+    else:
       break
-
-    output_vals = line.split(',')
-
-    # Handle delete columns
-    for delete_index in delete_indicies:
-      output_vals = output_vals[0:delete_index] + output_vals[delete_index+1:]
-
-    # Handle add columns
-    if args["add"]:
-      for add_args in args["add"]:
-        output_vals.append(add_args[1])
-
-    print(",".join(output_vals))
-        
 
 main()
