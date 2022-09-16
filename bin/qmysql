@@ -1,0 +1,17 @@
+#!/bin/bash
+
+if [[ -z "${DATABASE_URL}" ]];
+then
+  mysql $@
+else
+  username=`echo $DATABASE_URL | cut -d'/' -f3 | cut -d':' -f1`
+  password=`echo $DATABASE_URL | cut -d'/' -f3 | cut -d':' -f2 | cut -d'@' -f1`
+  host=`echo $DATABASE_URL | cut -d'@' -f2 | cut -d':' -f1`
+  port=`echo $DATABASE_URL | cut -d'@' -f2 | cut -d':' -f2 | cut -d'/' -f1`
+  db=`echo $DATABASE_URL | cut -d'@' -f2 | cut -d'/' -f2 -s`
+
+  exec_str="mysql --host=$host --port=$port --user=$username --password=$password $@ $db"
+  #echo $exec_str
+  #mysql --host $host --port $port --user $username --password $password $@ $db
+  eval $exec_str
+fi
