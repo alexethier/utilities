@@ -1,0 +1,175 @@
+#!/bin/bash
+
+set -e
+IFS=$'\n\t'
+
+USER=""
+INSTANCE_ID=""
+REGION="us-east-1"
+LOGIN=false
+SSHUTTLE=false
+USE_PORTS=false
+PORTS=()
+STOP=false
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        -l)
+            LOGIN=true
+            ;;
+        --login)
+            LOGIN=true
+            ;;
+        -f)
+            USE_PORTS=true
+            ;;
+        --forward)
+            USE_PORTS=true
+            ;;
+        -p)
+            USE_PORTS=true
+            PORTS+=($value)
+            shift
+            ;;
+        --port)
+            USE_PORTS=true
+            PORTS+=($value)
+            shift
+            ;;
+        -s)
+            SSHUTTLE=true
+            ;;
+        --sshuttle)
+            SSHUTTLE=true
+            ;;
+        -i)
+            INSTANCE_ID=$value
+            shift
+            ;;
+        --instance-id)
+            INSTANCE_ID=$value
+            shift
+            ;;
+        -r)
+            REGION=$value
+            shift
+            ;;
+        --region)
+            REGION=$value
+            shift
+            ;;
+        -u)
+            USER=$value
+            shift
+            ;;
+        --user)
+            USER=$value
+            shift
+            ;;
+        -t)
+            STOP=true
+            ;;
+        --stop)
+            STOP=true
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# Save settings
+SAVE_FILE="~/.aetmp/ec2_login.txt"
+if eval "test -f ${SAVE_FILE}" ; then
+    if [ ! -n "$INSTANCE_ID" ]; then
+        INSTANCE_ID=`eval "cat $SAVE_FILE | grep \"INSTANCE_ID\" | cut -d '=' -f2"`
+    fi
+    if [ ! -n "$PORTS" ]; then
+        PORTS_RAW=`eval "cat $SAVE_FILE | grep \"PORTS\" | cut -d '=' -f2"`
+        IFS=', ' read -r -a PORTS <<< "$PORTS_RAW"
+    fi
+    if [ ! -n "$USER" ]; then
+        USER=`eval "cat $SAVE_FILE | grep \"USER\" | cut -d '=' -f2"`
+    fi
+fi
+
+if [ ! -n "$INSTANCE_ID" ]; then
+    echo "Unable to determine ec2 instance id"
+    exit 1
+fi
+if [[ "$USE_PORTS" == "true" && ! -n "$PORTS" ]]; then
+    echo "Unable to determine ports"
+    exit 1
+fi
+if [ ! -n "$USER" ]; then
+    echo "Unable to determine user"
+    exit 1
+fi
+
+mkdir -p ~/.aetmp
+eval "echo \"INSTANCE_ID=$INSTANCE_ID\" > $SAVE_FILE"
+OUTPUT_PORTS=$(IFS=' ' ; echo "${PORTS[*]}")
+eval "echo \"PORTS=$OUTPUT_PORTS\" >> $SAVE_FILE"
+eval "echo \"USER=$USER\" >> $SAVE_FILE"
+
+get_state() {
+  state=`aws --region $REGION ec2 describe-instances --filters "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*].[State]' --output json | jq -r '.[][][]["Name"]'`
+  echo "$state"
+}
+
+ensure_running() {
+  state=$(get_state)
+  if [ "$state" == "stopped" ]; then
+    aws --region $REGION ec2 start-instances --instance-ids $INSTANCE_ID
+  fi
+
+  while [ "$state" != "running" ]; do
+    sleep 5
+    state=$(get_state)
+    echo "Instance state is $state, waiting for it to be running"
+  done
+}
+
+main() {
+
+  if [ "$STOP" == "true" ]; then
+    echo "Stopping instance $INSTANCE_ID"
+    aws --region $REGION ec2 stop-instances --instance-ids $INSTANCE_ID
+    exit 0
+  else
+    ensure_running
+  fi
+  
+  PUBLIC_IP=`aws --region $REGION ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output json | jq -r '.[][][]'`
+
+  if [ "$USE_PORTS" == "true" ]; then
+    echo "Remote forwarding ${PORTS[@]} to localhost"
+    connect_string=""
+    for port in "${PORTS[@]}"; do
+      connect_string="$connect_string -L $port:localhost:$port "
+    done
+    forward_command="ssh -o StrictHostKeyChecking=accept-new $connect_string $USER@$PUBLIC_IP -N"
+    eval $forward_command
+  fi
+  
+  if [ "$LOGIN" == "true" ]; then
+    echo "Logging into $PUBLIC_IP"
+    ssh -o StrictHostKeyChecking=accept-new $USER@$PUBLIC_IP
+  fi
+  
+  if [ "$SSHUTTLE" == "true" ]; then
+    echo "Connecting with sshuttle to $PUBLIC_IP"
+    sshuttle -r $USER@$PUBLIC_IP 0.0.0.0/0 -vvv
+  fi
+}
+
+main
