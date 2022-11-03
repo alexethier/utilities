@@ -152,7 +152,7 @@ main() {
   PUBLIC_IP=`aws --region $REGION ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output json | jq -r '.[][][]'`
 
   if [ "$USE_PORTS" == "true" ]; then
-    echo "Remote forwarding ${PORTS[@]} to localhost"
+    echo "Remote forwarding ${PORTS[@]} on $INSTANCE_ID to localhost"
     connect_string=""
     for port in "${PORTS[@]}"; do
       connect_string="$connect_string -L $port:localhost:$port "
@@ -162,13 +162,14 @@ main() {
   fi
   
   if [ "$LOGIN" == "true" ]; then
-    echo "Logging into $PUBLIC_IP"
+    echo "Logging into $INSTANCE_ID ($PUBLIC_IP)"
     ssh -o StrictHostKeyChecking=accept-new $USER@$PUBLIC_IP
   fi
   
   if [ "$SSHUTTLE" == "true" ]; then
-    echo "Connecting with sshuttle to $PUBLIC_IP"
-    sshuttle -r $USER@$PUBLIC_IP 0.0.0.0/0 -vvv
+    subnets="0.0.0.0/0"
+    echo "Connecting with sshuttle ($subnets) to $INSTANCE_ID ($PUBLIC_IP)"
+    sshuttle -r $USER@$PUBLIC_IP $subnets
   fi
 }
 
