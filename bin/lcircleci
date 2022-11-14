@@ -29,7 +29,7 @@ done
 BASE_COMMAND="circleci $OPTIONS"
 
 if [ "$ADD_ENV" = "true" ]; then
-  NPM_TOKEN="$(cat ~/.npmrc  | cut -d'=' -f2)"
+  NPM_TOKEN="$(cat ~/.npmrc  | grep "registry.npmjs.org" | cut -d'=' -f2)"
   AWS_PROD_KEY_ID="$(aws --profile production configure get aws_access_key_id)"
   AWS_PROD_ACCESS_KEY="$(aws --profile production configure get aws_secret_access_key)"
   AWS_PROD_SESSION_TOKEN="$(aws --profile production configure get aws_session_token)"
