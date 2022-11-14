@@ -2,6 +2,7 @@
 
 ADD_ENV=true
 
+OPTIONS=""
 # Parse command line
 while [[ $# > 0 ]]
 do
@@ -19,14 +20,13 @@ do
             set -x
             ;;
         *)
-            echo "Unknown option passed: $key"
-            exit 1
+            OPTIONS="$OPTIONS $key"
             ;;
     esac
     shift
 done
 
-BASE_COMMAND="circleci $@"
+BASE_COMMAND="circleci $OPTIONS"
 
 if [ "$ADD_ENV" = "true" ]; then
   NPM_TOKEN="$(cat ~/.npmrc  | cut -d'=' -f2)"
