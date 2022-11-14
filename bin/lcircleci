@@ -1,0 +1,45 @@
+#!/bin/bash
+
+ADD_ENV=true
+
+# Parse command line
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        -b)
+            ADD_ENV=false
+            ;;
+        --bare)
+            ADD_ENV=false
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+BASE_COMMAND="circleci $@"
+
+if [ "$ADD_ENV" = "true" ]; then
+  NPM_TOKEN="$(cat ~/.npmrc  | cut -d'=' -f2)"
+  AWS_PROD_KEY_ID="$(aws --profile production configure get aws_access_key_id)"
+  AWS_PROD_ACCESS_KEY="$(aws --profile production configure get aws_secret_access_key)"
+  AWS_PROD_SESSION_TOKEN="$(aws --profile production configure get aws_session_token)"
+  AWS_STAGING_KEY_ID="$(aws --profile staging configure get aws_access_key_id)"
+  AWS_STAGING_ACCESS_KEY="$(aws --profile staging configure get aws_secret_access_key)"
+  AWS_STAGING_SESSION_TOKEN="$(aws --profile staging configure get aws_session_token)"
+
+  COMMAND_ENV="-e NPM_TOKEN=\"$NPM_TOKEN\" -e AWS_PROD_KEY_ID=\"$AWS_PROD_KEY_ID\" -e AWS_PROD_ACCESS_KEY=\"$AWS_PROD_ACCESS_KEY\" -e AWS_PROD_SESSION_TOKEN=\"$AWS_PROD_SESSION_TOKEN\" -e AWS_STAGING_KEY_ID=\"$AWS_STAGING_KEY_ID\" -e AWS_STAGING_ACCESS_KEY=\"$AWS_STAGING_ACCESS_KEY\" -e AWS_STAGING_SESSION_TOKEN=\"$AWS_STAGING_SESSION_TOKEN\""
+fi
+
+FULL_COMMAND="$BASE_COMMAND $COMMAND_ENV"
+
+eval "$FULL_COMMAND"
