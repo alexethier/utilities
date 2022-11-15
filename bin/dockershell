@@ -2,8 +2,9 @@
 set -e 
 IFS=$'\n\t'
 
-# This script will find the latest docker image,  launch a new container from it, and connect to that container.
+# This script will find the latest docker image, launch a new container from it, and connect to that container.
 
+LOGIN_ONLY=false
 ROOT=true
 
 # Parse command line
@@ -13,6 +14,12 @@ do
     value="$2"
 
     case $key in
+        -l)
+            LOGIN_ONLY=true
+            ;;
+        --login)
+            LOGIN_ONLY=true
+            ;;
         --noroot)
             ROOT=false
             ;;
@@ -30,22 +37,28 @@ do
     shift
 done
 
+if [ "$LOGIN_ONLY" = "false" ]; then
 
-IMAGE_ID=`docker images | head -n 2 | grep -v REPOSITORY | tr -s ' ' | cut -d ' ' -f3`
-if [ -n "$1" ]; then
-    IMAGE_ID="$1"
+    IMAGE_ID=`docker images | head -n 2 | grep -v REPOSITORY | tr -s ' ' | cut -d ' ' -f3`
+    if [ -n "$1" ]; then
+        IMAGE_ID="$1"
+    fi
+    
+    ROOT_CMD=""
+    if [ "$ROOT" = true ] ; then
+        ROOT_CMD="--user root"
+    fi
+    CONT_ID=`eval "docker run -idt ${ROOT_CMD} $IMAGE_ID /bin/bash"`
+    
+    
+    function clean {
+      docker rm -f $CONT_ID
+    }
+    trap clean EXIT
+
+else
+    CONT_ID=`docker ps -a | head -n 2 | tail -n 1 | cut -d' ' -f1`
 fi
-
-ROOT_CMD=""
-if [ "$ROOT" = true ] ; then
-    ROOT_CMD="--user root"
-fi
-CONT_ID=`eval "docker run -idt ${ROOT_CMD} $IMAGE_ID /bin/bash"`
-
-
-function clean {
-  docker rm -f $CONT_ID
-}
-trap clean EXIT
 
 docker exec -it $CONT_ID /bin/bash
+
