@@ -2,6 +2,7 @@
 
 ADD_ENV=true
 
+OPTIONS=""
 # Parse command line
 while [[ $# > 0 ]]
 do
@@ -19,17 +20,16 @@ do
             set -x
             ;;
         *)
-            echo "Unknown option passed: $key"
-            exit 1
+            OPTIONS="$OPTIONS $key"
             ;;
     esac
     shift
 done
 
-BASE_COMMAND="circleci $@"
+BASE_COMMAND="circleci $OPTIONS"
 
 if [ "$ADD_ENV" = "true" ]; then
-  NPM_TOKEN="$(cat ~/.npmrc  | cut -d'=' -f2)"
+  NPM_TOKEN="$(cat ~/.npmrc  | grep "registry.npmjs.org" | cut -d'=' -f2)"
   AWS_PROD_KEY_ID="$(aws --profile production configure get aws_access_key_id)"
   AWS_PROD_ACCESS_KEY="$(aws --profile production configure get aws_secret_access_key)"
   AWS_PROD_SESSION_TOKEN="$(aws --profile production configure get aws_session_token)"
@@ -37,7 +37,11 @@ if [ "$ADD_ENV" = "true" ]; then
   AWS_STAGING_ACCESS_KEY="$(aws --profile staging configure get aws_secret_access_key)"
   AWS_STAGING_SESSION_TOKEN="$(aws --profile staging configure get aws_session_token)"
 
-  COMMAND_ENV="-e NPM_TOKEN=\"$NPM_TOKEN\" -e AWS_PROD_KEY_ID=\"$AWS_PROD_KEY_ID\" -e AWS_PROD_ACCESS_KEY=\"$AWS_PROD_ACCESS_KEY\" -e AWS_PROD_SESSION_TOKEN=\"$AWS_PROD_SESSION_TOKEN\" -e AWS_STAGING_KEY_ID=\"$AWS_STAGING_KEY_ID\" -e AWS_STAGING_ACCESS_KEY=\"$AWS_STAGING_ACCESS_KEY\" -e AWS_STAGING_SESSION_TOKEN=\"$AWS_STAGING_SESSION_TOKEN\""
+  # Note: CircleCI Server builds do not need this, but local builds do, defaults to 'staging'
+  echo "[WARNING]: Setting AWS_SESSION_TOKEN to user's staging aws_session_token"
+  AWS_SESSION_TOKEN="$AWS_STAGING_SESSION_TOKEN"
+
+  COMMAND_ENV="-e NPM_TOKEN=\"$NPM_TOKEN\" -e AWS_PROD_KEY_ID=\"$AWS_PROD_KEY_ID\" -e AWS_PROD_ACCESS_KEY=\"$AWS_PROD_ACCESS_KEY\" -e AWS_PROD_SESSION_TOKEN=\"$AWS_PROD_SESSION_TOKEN\" -e AWS_STAGING_KEY_ID=\"$AWS_STAGING_KEY_ID\" -e AWS_STAGING_ACCESS_KEY=\"$AWS_STAGING_ACCESS_KEY\" -e AWS_STAGING_SESSION_TOKEN=\"$AWS_STAGING_SESSION_TOKEN\" -e AWS_SESSION_TOKEN=\"$AWS_SESSION_TOKEN\""
 fi
 
 FULL_COMMAND="$BASE_COMMAND $COMMAND_ENV"
