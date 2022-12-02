@@ -16,6 +16,18 @@ def convert_datetime_timezone(dt, source_timezone, target_timezone):
 
     return dt
 
+# Apply time zone parsing that is technically incorrect but correct for my specific usages.
+def fuzzy_convert_timezone_string(timezone_str):
+  if timezone_str.upper().startswith('Z'):
+    return 'Zulu'
+  if timezone_str.upper().startswith('E'):
+    return 'America/New_York'
+  return timezone_str
+
+def parse_timezone_string(timezone_str):
+  converted_timezone_string = fuzzy_convert_timezone_string(str(timezone_str))
+  return pytz.timezone(converted_timezone_string)
+
 def main():
 
   parser = argparse.ArgumentParser()
@@ -23,12 +35,14 @@ def main():
   parser.add_argument("-t","--target", help="Target timezone", default="Zulu")
   args = vars(parser.parse_args())
 
-  source_timezone = pytz.timezone(str(args['source']))
-  target_timezone = pytz.timezone(str(args['target']))
+  source_timezone_str = fuzzy_convert_timezone_string(str(args['source']))
+
+  source_timezone = parse_timezone_string(args['source'])
+  target_timezone = parse_timezone_string(args['target'])
 
   for raw_line in sys.stdin:
     line = raw_line.strip()
     target_datetime = convert_datetime_timezone(line, source_timezone, target_timezone)
-    print(target_datetime.strftime(ISO_FORMAT))
+    print(target_datetime.strftime("%I:%M %p").lstrip('0'))
 
 main()
