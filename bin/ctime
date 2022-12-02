@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+
+# This script converts one time zone to another
+
+import pytz
+import datetime
+import argparse
+import sys
+
+ISO_FORMAT = datetime.datetime.now().isoformat()
+
+def convert_datetime_timezone(dt, source_timezone, target_timezone):
+    dt = datetime.datetime.strptime(dt,"%Y-%m-%d %H:%M:%S")
+    dt = source_timezone.localize(dt)
+    dt = dt.astimezone(target_timezone)
+
+    return dt
+
+def main():
+
+  parser = argparse.ArgumentParser()
+  parser.add_argument("-s","--source", help="Source timezone", default="America/New_York")
+  parser.add_argument("-t","--target", help="Target timezone", default="Zulu")
+  args = vars(parser.parse_args())
+
+  source_timezone = pytz.timezone(str(args['source']))
+  target_timezone = pytz.timezone(str(args['target']))
+
+  for raw_line in sys.stdin:
+    line = raw_line.strip()
+    target_datetime = convert_datetime_timezone(line, source_timezone, target_timezone)
+    print(target_datetime.strftime(ISO_FORMAT))
+
+main()
