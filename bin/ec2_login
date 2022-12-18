@@ -140,13 +140,16 @@ OUTPUT_PORTS=$(IFS=' ' ; echo "${PORTS[*]}")
 eval "echo \"PORTS=$OUTPUT_PORTS\" >> $SAVE_FILE"
 eval "echo \"USER=$USER\" >> $SAVE_FILE"
 
-get_state() {
-  state=`aws --region $REGION ec2 describe-instances --filters "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*].[State]' --output json | jq -r '.[][][]["Name"]'`
-  echo "$state"
+get_info() {
+  echo `aws --region $REGION ec2 describe-instances --filters "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*]' --output json | jq -r '.[][]'`
 }
 
+info=$(get_info)
+state=$(echo $info | jq -r '.State.Name')
+name=$(echo $info | jq -r '.Tags[] | select(.Key=="Name") | .Value')
+echo "Instance $INSTANCE_ID ($name) is $state"
+
 ensure_running() {
-  state=$(get_state)
   if [ "$state" == "stopped" ]; then
     aws --region $REGION ec2 start-instances --instance-ids $INSTANCE_ID
   fi
