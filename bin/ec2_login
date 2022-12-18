@@ -4,6 +4,7 @@ set -e
 IFS=$'\n\t'
 
 USER=""
+INSTANCE_NAME=""
 INSTANCE_ID=""
 REGION="us-east-1"
 LOGIN=false
@@ -46,6 +47,14 @@ do
             ;;
         --sshuttle)
             SSHUTTLE=true
+            ;;
+        -n)
+            INSTANCE_NAME=$value
+            shift
+            ;;
+        --name)
+            INSTANCE_NAME=$value
+            shift
             ;;
         -i)
             INSTANCE_ID=$value
@@ -109,8 +118,11 @@ done
 # Save settings
 SAVE_FILE="~/.aetmp/ec2_login.txt"
 if eval "test -f ${SAVE_FILE}" ; then
-    if [ ! -n "$INSTANCE_ID" ]; then
+    if [[ ! -n "$INSTANCE_ID" && ! -n "$INSTANCE_NAME" ]]; then
         INSTANCE_ID=`eval "cat $SAVE_FILE | grep \"INSTANCE_ID\" | cut -d '=' -f2"`
+    fi
+    if [[ ! -n "$INSTANCE_ID" && ! -n "$INSTANCE_NAME" ]]; then
+        INSTANCE_NAME=`eval "cat $SAVE_FILE | grep \"INSTANCE_NAME\" | cut -d '=' -f2"`
     fi
     if [ ! -n "$PORTS" ]; then
         PORTS_RAW=`eval "cat $SAVE_FILE | grep \"PORTS\" | cut -d '=' -f2"`
@@ -121,8 +133,8 @@ if eval "test -f ${SAVE_FILE}" ; then
     fi
 fi
 
-if [ ! -n "$INSTANCE_ID" ]; then
-    echo "Unable to determine ec2 instance id"
+if [[ ! -n "$INSTANCE_ID" && ! -n "$INSTANCE_NAME" ]]; then
+    echo "Unable to determine ec2 instance id or name"
     exit 1
 fi
 if [[ "$USE_PORTS" == "true" && ! -n "$PORTS" ]]; then
@@ -136,22 +148,39 @@ fi
 
 mkdir -p ~/.aetmp
 eval "echo \"INSTANCE_ID=$INSTANCE_ID\" > $SAVE_FILE"
+eval "echo \"INSTANCE_NAME=$INSTANCE_NAME\" > $SAVE_FILE"
 OUTPUT_PORTS=$(IFS=' ' ; echo "${PORTS[*]}")
 eval "echo \"PORTS=$OUTPUT_PORTS\" >> $SAVE_FILE"
 eval "echo \"USER=$USER\" >> $SAVE_FILE"
 
-get_info() {
-  echo `aws --region $REGION ec2 describe-instances --filters "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*]' --output json | jq -r '.[][]'`
-}
+# Get Info
+if [ -n "$INSTANCE_ID" ]; then
+  info=`aws --region $REGION ec2 describe-instances --filters "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*]' --output json | jq -r '.[][]'`
+fi
+if [ -n "$INSTANCE_NAME" ]; then
+  matched_instances=`aws ec2 describe-instances --filters "Name=tag:Name,Values=*$INSTANCE_NAME*" | jq '.Reservations'`
+  length=`echo $matched_instances | jq '. | length'`
+  if [ "$length" == "0" ]; then
+    echo "Found 0 instances with name matching $INSTANCE_NAME"
+    exit 1
+  fi
+  if [ "$length" != "1" ]; then
+    echo "Found $length instances with name matching $INSTANCE_NAME:"
+    names=`echo $matched_instances | jq -r '.[]["Instances"][]["Tags"][] | select(.Key == "Name") | .Value'`
+    echo "$names"
+    exit 1
+  fi
+  info=`echo $matched_instances | jq '.[]["Instances"][]'`
+fi
 
-info=$(get_info)
 state=$(echo $info | jq -r '.State.Name')
 name=$(echo $info | jq -r '.Tags[] | select(.Key=="Name") | .Value')
-echo "Instance $INSTANCE_ID ($name) is $state"
+id=$(echo $info | jq -r '.InstanceId')
+echo "Instance $id ($name) is $state"
 
 ensure_running() {
   if [ "$state" == "stopped" ]; then
-    aws --region $REGION ec2 start-instances --instance-ids $INSTANCE_ID
+    aws --region $REGION ec2 start-instances --instance-ids $id
   fi
 
   while [ "$state" != "running" ]; do
@@ -164,18 +193,18 @@ ensure_running() {
 main() {
 
   if [ "$STOP" == "true" ]; then
-    echo "Stopping instance $INSTANCE_ID"
-    aws --region $REGION ec2 stop-instances --instance-ids $INSTANCE_ID
+    echo "Stopping instance $id"
+    aws --region $REGION ec2 stop-instances --instance-ids $id
     exit 0
   else
     ensure_running
   fi
   
-  PUBLIC_IP=`aws --region $REGION ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output json | jq -r '.[][][]'`
-  echo "Instance $INSTANCE_ID has public ip ${PUBLIC_IP}"
+  PUBLIC_IP=`aws --region $REGION ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=instance-id,Values=$id" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output json | jq -r '.[][][]'`
+  echo "Instance $id has public ip ${PUBLIC_IP}"
 
   if [ "$USE_PORTS" == "true" ]; then
-    echo "Remote forwarding $PORT_FORWARD_ADDRESS:${PORTS[@]} on $INSTANCE_ID to localhost"
+    echo "Remote forwarding $PORT_FORWARD_ADDRESS:${PORTS[@]} on $id to localhost"
     connect_string=""
     for port in "${PORTS[@]}"; do
       connect_string="$connect_string -L $port:$PORT_FORWARD_ADDRESS:$port "
@@ -185,13 +214,13 @@ main() {
   fi
   
   if [ "$LOGIN" == "true" ]; then
-    echo "Logging into $INSTANCE_ID ($PUBLIC_IP)"
+    echo "Logging into $id ($PUBLIC_IP)"
     ssh -o StrictHostKeyChecking=accept-new $USER@$PUBLIC_IP
   fi
   
   if [ "$SSHUTTLE" == "true" ]; then
     subnets="0.0.0.0/0"
-    echo "Connecting with sshuttle ($subnets) to $INSTANCE_ID ($PUBLIC_IP)"
+    echo "Connecting with sshuttle ($subnets) to $id ($PUBLIC_IP)"
     sshuttle -r $USER@$PUBLIC_IP $subnets
   fi
 }
