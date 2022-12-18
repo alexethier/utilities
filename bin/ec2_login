@@ -11,6 +11,7 @@ SSHUTTLE=false
 USE_PORTS=false
 PORTS=()
 STOP=false
+PORT_FORWARD_ADDRESS="127.0.0.1"
 
 while [[ $# > 0 ]]
 do
@@ -75,6 +76,24 @@ do
             ;;
         --stop)
             STOP=true
+            ;;
+        -a)
+            PORT_FORWARD_ADDRESS=$value
+            shift
+            ;;
+        --address-forward-port)
+            PORT_FORWARD_ADDRESS=$value
+            shift
+            ;;
+        -h)
+            echo "Configurable options: -i <INSTANCE ID> -r <REGION> -u <USERNAME> -p <PORT> -a <PORT FORWARDING ADDRESS>"
+            echo "Boolean flags: -l (login) ; -s (run sshuttle) -t (stop instance)"
+            exit 1
+            ;;
+        --help)
+            echo "Configurable options: -i <INSTANCE ID> -r <REGION> -u <USERNAME> -p <PORT> -a <PORT FORWARDING ADDRESS>"
+            echo "Boolean flags: -l (login) ; -s (run sshuttle) -t (stop instance)"
+            exit 1
             ;;
         -v)
             set -x
@@ -150,12 +169,13 @@ main() {
   fi
   
   PUBLIC_IP=`aws --region $REGION ec2 describe-instances --filters "Name=instance-state-name,Values=running" "Name=instance-id,Values=$INSTANCE_ID" --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output json | jq -r '.[][][]'`
+  echo "Instance $INSTANCE_ID has public ip ${PUBLIC_IP}"
 
   if [ "$USE_PORTS" == "true" ]; then
-    echo "Remote forwarding ${PORTS[@]} on $INSTANCE_ID to localhost"
+    echo "Remote forwarding $PORT_FORWARD_ADDRESS:${PORTS[@]} on $INSTANCE_ID to localhost"
     connect_string=""
     for port in "${PORTS[@]}"; do
-      connect_string="$connect_string -L $port:localhost:$port "
+      connect_string="$connect_string -L $port:$PORT_FORWARD_ADDRESS:$port "
     done
     forward_command="ssh -o StrictHostKeyChecking=accept-new $connect_string $USER@$PUBLIC_IP -N"
     eval $forward_command
