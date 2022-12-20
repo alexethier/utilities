@@ -1,4 +1,8 @@
 #!/bin/bash
+# This script will search for an ec2 instance with matching name
+# It will start it if it is stopped
+# If it is running it will determine it's public ip address
+# It will when try to make an ssh connection and forward address:ports accessible from the server.
 
 set -e
 IFS=$'\n\t'

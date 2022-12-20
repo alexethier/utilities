@@ -1,0 +1,79 @@
+#!/bin/bash
+# Converts AWS env. variables from lambda or elastic beanstalk (todo) to export statements.
+
+set -e
+IFS=$'\n\t'
+
+NAME=""
+MODE="lambda"
+SOURCE_ENV="false"
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        -l)
+            MODE="lambda"
+            ;;
+        --lambda)
+            LOGIN=true
+            ;;
+        -e)
+            MODE="eb"
+            ;;
+        --elastic-beanstalk)
+            MODE="eb"
+            ;;
+        -n)
+            NAME=$value
+            shift
+            ;;
+        --name)
+            NAME=$value
+            shift
+            ;;
+        -s)
+            SOURCE_ENV="true"
+            ;;
+        --source)
+            SOURCE_ENV="true"
+            ;;
+        -h)
+            echo "Configurable options: -n <NAME>"
+            echo "Boolean flags: -l (lambda) ; -e (elastic beanstalk) -s (source env. vars)"
+            exit 1
+            ;;
+        --help)
+            echo "Configurable options: -n <NAME>"
+            echo "Boolean flags: -l (lambda) ; -e (elastic beanstalk) -s (source env. vars)"
+            exit 1
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ "$MODE" != "lambda" ]; then
+  # TODO: support elastic beanstalk
+  echo "Mode $MODE is not supported"
+  exit 1
+fi
+
+main() {
+  
+  if [ "$MODE" == "lambda" ]; then
+    output=`aws lambda get-function-configuration --function-name "$NAME" | jq -r '.Environment.Variables | to_entries | map("export " + .key + "=" + .value) | .[]'`
+    echo "$output"
+  fi
+
+}
+
+main
