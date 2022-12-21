@@ -1,0 +1,67 @@
+#!/bin/bash
+# Work with AWS Cloudwatch Logs
+
+set -e
+IFS=$'\n\t'
+
+LOG_GROUP_NAME=""
+MAX_ITEMS=200
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        -n)
+            LOG_GROUP_NAME=$value
+            shift
+            ;;
+        --name)
+            LOG_GROUP_NAME=$value
+            shift
+            ;;
+        -m)
+            MAX_ITEMS=$value
+            shift
+            ;;
+        --max)
+            MAX_ITEMS=$value
+            shift
+            ;;
+        -h)
+            echo "Configurable options: -n <LOG_GROUP_NAME>"
+            echo "Boolean flags: "
+            exit 1
+            ;;
+        --help)
+            echo "Configurable options: -n <LOG_GROUP_NAME>"
+            echo "Boolean flags: "
+            exit 1
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ "$LOG_GROUP_NAME" == "" ]; then
+  echo "Must provide -n <LOG_GROUP_NAME>"
+  exit 1
+fi
+
+main() {
+
+  response=`aws logs filter-log-events --log-group-name $LOG_GROUP_NAME --max-items $MAX_ITEMS`
+  next_token=`echo $response | jq '.NextToken'`
+  parsed_response=`echo $response | jq -r '[ .events[] | { timestamp: (.timestamp / 1000), message: .message } | .timestamp |= strftime("%Y-%m-%d %H:%M:%S") | .message as $mes | .timestamp as $tim | try (.message |= fromjson.msg) catch ({ message: $mes, timestamp: $tim }) ] | map(.timestamp + ": " + .message) | .[]'`
+  echo "$parsed_response"
+
+}
+
+main
