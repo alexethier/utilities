@@ -35,6 +35,9 @@ do
         --elastic-beanstalk)
             MODE="eb"
             ;;
+        --ssm)
+            MODE="ssm"
+            ;;
         -n)
             NAME=$value
             shift
@@ -87,8 +90,13 @@ main() {
     run_command="aws $aws_profile_option elasticbeanstalk describe-configuration-settings --application-name $appliction_name --environment-name $NAME | jq -r '[ .ConfigurationSettings[0].OptionSettings[] ] | map(select(.Namespace == \"aws:elasticbeanstalk:application:environment\")) | map(\"export \" + .OptionName + \"=\" + .Value) | .[]'"
     output=`eval $run_command`
     echo "$output"
+  elif [ "$MODE" == "ssm" ]; then
+    #run_command="aws $aws_profile_option ssm get-parameters-by-path --path \"$NAME\""
+    run_command="aws $aws_profile_option ssm get-parameters-by-path --path \"$NAME\" | jq -r '.Parameters | map({ Name: (.Name | split(\"/\") | .[-1]), Value: .Value}) | map(\"export \" + .Name + \"=\\\"\" + .Value + \"\\\"\") | .[]'"
+    output=`eval $run_command`
+    echo "$output"
   else
-    echo "Unknown mode: $MODE (only 'eb' and 'lambda' supported)"
+    echo "Unknown mode: $MODE. Supported modes: 'eb', 'lambda', 'ssm'"
   fi
 
 }
