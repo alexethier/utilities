@@ -59,7 +59,7 @@ main() {
 
   response=`aws logs filter-log-events --log-group-name $LOG_GROUP_NAME --max-items $MAX_ITEMS`
   next_token=`echo $response | jq '.NextToken'`
-  parsed_response=`echo $response | jq -r '[ .events[] | { timestamp: (.timestamp / 1000), message: .message } | .timestamp |= strftime("%Y-%m-%d %H:%M:%S") | .message as $mes | .timestamp as $tim | try (.message |= fromjson.msg) catch ({ message: $mes, timestamp: $tim }) ] | map(.timestamp + ": " + .message) | .[]'`
+  parsed_response=`echo $response | jq -r '[ .events[] | { timestamp: (.timestamp / 1000), message: .message } | .timestamp |= strftime("%Y-%m-%d %H:%M:%S") | .message as $mes | .timestamp as $tim | try (.message |= fromjson.msg) catch ({ message: $mes, timestamp: $tim }) ] | map(.timestamp + ": " + .message) | map(rtrimstr("\n")) | .[]'`
   echo "$parsed_response"
 
 }
