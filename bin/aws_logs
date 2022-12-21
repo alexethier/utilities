@@ -7,6 +7,8 @@ IFS=$'\n\t'
 LOG_GROUP_NAME=""
 MAX_ITEMS=200
 START_TIME_AGE_HOURS=1
+FILTER_PATTERN=""
+QUERY=""
 
 while [[ $# > 0 ]]
 do
@@ -28,6 +30,27 @@ do
             ;;
         --start)
             START_TIME_AGE_HOURS=$value
+            shift
+            ;;
+        -f)
+            # Example filter patterns
+            # Simple filter: -f 'value'
+            # Advanced filter: -f "{ $.X-Request-Id = *9e05e908-c411-4517-8da0-b8d1494ba440* }"
+            FILTER_PATTERN=$value
+            shift
+            ;;
+        --filter)
+            FILTER_PATTERN=$value
+            shift
+            ;;
+        -q)
+            # Note this option queries data after being retrieved from AWS and can break downstream parsing.
+            # Example query: events[?message == '*error*']
+            QUERY=$value
+            shift
+            ;;
+        --query)
+            QUERY=$value
             shift
             ;;
         -m)
@@ -70,7 +93,18 @@ start_time=`expr 1000 \* $(date -r $(date +%s) -v -${start_time_age_seconds}S +%
 
 main() {
 
-  response=`aws logs filter-log-events --log-group-name $LOG_GROUP_NAME --start-time $start_time --max-items $MAX_ITEMS`
+  filter_option=""
+  if [ "$FILTER_PATTERN" != "" ]; then
+    filter_option=" --filter-pattern \"$FILTER_PATTERN\" "
+  fi
+
+  query_option=""
+  if [ "$QUERY" != "" ]; then
+    query_option=" --query \"$QUERY\" "
+  fi
+
+  run_command="aws logs filter-log-events --log-group-name $LOG_GROUP_NAME --start-time $start_time --max-items $MAX_ITEMS $filter_option $query_option"
+  response=`eval $run_command`
   next_token=`echo $response | jq '.NextToken'`
   parsed_response=`echo $response | jq -r '[ .events[] | { timestamp: (.timestamp / 1000), message: .message } | .timestamp |= strftime("%Y-%m-%d %H:%M:%S") | .message as $mes | .timestamp as $tim | try (.message |= fromjson.msg) catch ({ message: $mes, timestamp: $tim }) ] | map(.timestamp + ": " + .message) | map(rtrimstr("\n")) | .[]'`
   echo "$parsed_response"
