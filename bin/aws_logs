@@ -6,6 +6,7 @@ IFS=$'\n\t'
 
 LOG_GROUP_NAME=""
 MAX_ITEMS=200
+START_TIME_AGE_HOURS=1
 
 while [[ $# > 0 ]]
 do
@@ -19,6 +20,14 @@ do
             ;;
         --name)
             LOG_GROUP_NAME=$value
+            shift
+            ;;
+        -s)
+            START_TIME_AGE_HOURS=$value
+            shift
+            ;;
+        --start)
+            START_TIME_AGE_HOURS=$value
             shift
             ;;
         -m)
@@ -55,9 +64,13 @@ if [ "$LOG_GROUP_NAME" == "" ]; then
   exit 1
 fi
 
+
+start_time_age_seconds=`expr $START_TIME_AGE_HOURS \* 60 \* 60`
+start_time=`expr 1000 \* $(date -r $(date +%s) -v -${start_time_age_seconds}S +%s)`
+
 main() {
 
-  response=`aws logs filter-log-events --log-group-name $LOG_GROUP_NAME --max-items $MAX_ITEMS`
+  response=`aws logs filter-log-events --log-group-name $LOG_GROUP_NAME --start-time $start_time --max-items $MAX_ITEMS`
   next_token=`echo $response | jq '.NextToken'`
   parsed_response=`echo $response | jq -r '[ .events[] | { timestamp: (.timestamp / 1000), message: .message } | .timestamp |= strftime("%Y-%m-%d %H:%M:%S") | .message as $mes | .timestamp as $tim | try (.message |= fromjson.msg) catch ({ message: $mes, timestamp: $tim }) ] | map(.timestamp + ": " + .message) | map(rtrimstr("\n")) | .[]'`
   echo "$parsed_response"
