@@ -4,6 +4,7 @@
 set -e
 IFS=$'\n\t'
 
+AWS_PROFILE=""
 NAME=""
 MODE="lambda"
 SOURCE_ENV="false"
@@ -14,6 +15,14 @@ do
     value="$2"
 
     case $key in
+        -p)
+            AWS_PROFILE=$value
+            shift
+            ;;
+        --profile)
+            AWS_PROFILE=$value
+            shift
+            ;;
         -l)
             MODE="lambda"
             ;;
@@ -61,17 +70,25 @@ do
     shift
 done
 
-if [ "$MODE" != "lambda" ]; then
-  # TODO: support elastic beanstalk
-  echo "Mode $MODE is not supported"
-  exit 1
-fi
-
 main() {
+
+  aws_profile_option=""
+  if [ "$AWS_PROFILE" != "" ]; then
+    aws_profile_option=" --profile $AWS_PROFILE "
+  fi
   
   if [ "$MODE" == "lambda" ]; then
-    output=`aws lambda get-function-configuration --function-name "$NAME" | jq -r '.Environment.Variables | to_entries | map("export " + .key + "=" + .value) | .[]'`
+    run_command="aws $aws_profile_option lambda get-function-configuration --function-name \"$NAME\" | jq -r '.Environment.Variables | to_entries | map(\"export \" + .key + \"=\" + .value) | .[]'"
+    output=`eval $run_command`
     echo "$output"
+  elif [ "$MODE" == "eb" ]; then
+    run_command="aws $aws_profile_option elasticbeanstalk describe-environments --environment-names $NAME | jq -r '.Environments[0][\"ApplicationName\"]'"
+    appliction_name=`eval $run_command`
+    run_command="aws $aws_profile_option elasticbeanstalk describe-configuration-settings --application-name $appliction_name --environment-name $NAME | jq -r '[ .ConfigurationSettings[0].OptionSettings[] ] | map(select(.Namespace == \"aws:elasticbeanstalk:application:environment\")) | map(\"export \" + .OptionName + \"=\" + .Value) | .[]'"
+    output=`eval $run_command`
+    echo "$output"
+  else
+    echo "Unknown mode: $MODE (only 'eb' and 'lambda' supported)"
   fi
 
 }

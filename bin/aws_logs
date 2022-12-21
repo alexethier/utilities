@@ -4,6 +4,7 @@
 set -e
 IFS=$'\n\t'
 
+AWS_PROFILE=""
 LOG_GROUP_NAME=""
 MAX_ITEMS=200
 START_TIME_AGE_HOURS=1
@@ -61,13 +62,21 @@ do
             MAX_ITEMS=$value
             shift
             ;;
+        -p)
+            AWS_PROFILE=$value
+            shift
+            ;;
+        --profile)
+            AWS_PROFILE=$value
+            shift
+            ;;
         -h)
-            echo "Configurable options: -n <LOG_GROUP_NAME>"
+            echo "Configurable options: -n <LOG_GROUP_NAME> -s <START_TIME_AGE_HR> -f <FILTER_PATTERN> -m <MAX_ITEMS> -p <AWS_PROFILE>"
             echo "Boolean flags: "
             exit 1
             ;;
         --help)
-            echo "Configurable options: -n <LOG_GROUP_NAME>"
+            echo "Configurable options: -n <LOG_GROUP_NAME> -s <START_TIME_AGE_HR> -f <FILTER_PATTERN> -m <MAX_ITEMS> -p <AWS_PROFILE>"
             echo "Boolean flags: "
             exit 1
             ;;
@@ -93,6 +102,11 @@ start_time=`expr 1000 \* $(date -r $(date +%s) -v -${start_time_age_seconds}S +%
 
 main() {
 
+  aws_profile_option=""
+  if [ "$AWS_PROFILE" != "" ]; then
+    aws_profile_option=" --profile $AWS_PROFILE "
+  fi
+
   filter_option=""
   if [ "$FILTER_PATTERN" != "" ]; then
     filter_option=" --filter-pattern \"$FILTER_PATTERN\" "
@@ -103,7 +117,7 @@ main() {
     query_option=" --query \"$QUERY\" "
   fi
 
-  run_command="aws logs filter-log-events --log-group-name $LOG_GROUP_NAME --start-time $start_time --max-items $MAX_ITEMS $filter_option $query_option"
+  run_command="aws $aws_profile_option logs filter-log-events --log-group-name $LOG_GROUP_NAME --start-time $start_time --max-items $MAX_ITEMS $filter_option $query_option"
   response=`eval $run_command`
   next_token=`echo $response | jq '.NextToken'`
   parsed_response=`echo $response | jq -r '[ .events[] | { timestamp: (.timestamp / 1000), message: .message } | .timestamp |= strftime("%Y-%m-%d %H:%M:%S") | .message as $mes | .timestamp as $tim | try (.message |= fromjson.msg) catch ({ message: $mes, timestamp: $tim }) ] | map(.timestamp + ": " + .message) | map(rtrimstr("\n")) | .[]'`
