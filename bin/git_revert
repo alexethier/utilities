@@ -1,0 +1,150 @@
+#!/bin/bash
+# Revert a commit
+
+set -e -o pipefail
+IFS=$'\n\t'
+
+COMMIT_HASH="" # Git commit to retrieve reverted files from
+EDIT_POINTER="" # Git branch or commit hash to run the revert on
+REPO="" # Git url to checkout
+TEMP_WORKDIR="./tmp_git_revert"
+NEW_BRANCH_NAME="tmp-automated-revert"
+PUSH_COMMIT="false"
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        -w)
+            TEMP_WORKDIR=$value
+            shift
+            ;;
+        --work-dir)
+            TEMP_WORKDIR=$value
+            shift
+            ;;
+        -c)
+            COMMIT_HASH=$value
+            shift
+            ;;
+        --commit)
+            COMMIT_HASH=$value
+            shift
+            ;;
+        -e)
+            EDIT_POINTER=$value
+            shift
+            ;;
+        --edit)
+            EDIT_POINTER=$value
+            shift
+            ;;
+        -r)
+            REPO=$value
+            shift
+            ;;
+        --repo)
+            REPO=$value
+            shift
+            ;;
+        -p)
+            PUSH_COMMIT="true"
+            ;;
+        --push)
+            PUSH_COMMIT="true"
+            ;;
+        -h)
+            echo "Configurable options: -r <REPO_URL> -c <REVERT_COMMIT_HASH> -e <BRANCH_TO_MODIFY>"
+            echo "Boolean flags: "
+            exit 1
+            ;;
+        --help)
+            echo "Configurable options: -r <REPO_URL> -c <REVERT_COMMIT_HASH> -e <BRANCH_TO_MODIFY>"
+            echo "Boolean flags: "
+            exit 1
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ "$COMMIT_HASH" == "" ]; then
+  echo "Must provide the git hash to get reverted files from, use: -c <COMMIT_HASH>"
+  exit 1
+fi
+
+if [ "$EDIT_POINTER" == "" ]; then
+  echo "Must provide the git branch to edit, use: -e <BRANCH_TO_MODIFY>"
+  exit 1
+fi
+
+if [ "$REPO" == "" ]; then
+  echo "Must provide the git repo to checkout, use -r <REPO_URL>"
+  exit 1
+fi
+
+if [ "$TEMP_WORKDIR" == "" ]; then
+  echo "The temp work directory must be valid."
+  exit 1
+fi
+
+main() {
+
+  if [ ! -d "$TEMP_WORKDIR" ]; then
+    echo "Making tmp directory '$TEMP_WORKDIR'"
+    mkdir -p "$TEMP_WORKDIR"
+  else
+    echo "Cleaning tmp directory '$TEMP_WORKDIR'"
+    rm -rf $TEMP_WORKDIR
+  fi
+
+  cd $TEMP_WORKDIR
+
+  ## Setup a repo pointing to the commit we want
+  echo "Setting up repo that points to revert commit"
+  git clone $REPO
+  REPO_NAME=`ls -1rt | head -n 1`
+  cd $REPO_NAME
+  git checkout $COMMIT_HASH
+  rm -rf .git
+  cd ..
+  mv $REPO_NAME "${REPO_NAME}_commit_to_revert_to"
+
+  ## Setup a repo that we will commit to
+  echo "Setting up repo that we will edit"
+  git clone $REPO
+  REPO_NAME=`ls -1rt | head -n 1`
+  cd $REPO_NAME
+  git checkout $EDIT_POINTER
+  mv .git ../
+  ls -1a | grep -v "^..$" | grep -v "^.$" | xargs -I {} rm -rf {}
+  mv ../.git .
+  git checkout -b $NEW_BRANCH_NAME
+  cd ..
+  mv $REPO_NAME "${REPO_NAME}_commit_to_edit"
+
+  ## Copy files over
+  echo "Copying files"
+  ls -1a "${REPO_NAME}_commit_to_revert_to/" grep -v "^..$" | grep -v "^.$" | xargs -I {} cp -r "${REPO_NAME}_commit_to_revert_to/{}" "${REPO_NAME}_commit_to_edit/"
+  cd "${REPO_NAME}_commit_to_edit"
+
+  # Commit
+  echo "Committing files"
+  git commit -am "revert files"
+
+  if [ "$PUSH_COMMIT" == "true" ]; then
+    # Push commit
+    echo "Pushing revert commit with branch name: $NEW_BRANCH_NAME"
+    git push -u origin $NEW_BRANCH_NAME
+  fi
+}
+
+main
