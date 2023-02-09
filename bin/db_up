@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+#set -e
 IFS=$'\n\t'
 
 # This script will find the latest docker image, launch a new container from it, and connect to that container.
@@ -64,6 +64,19 @@ function write_mysql8 {
   if [ -z "$container_id" ]; then
     echo "Creating $name"
     docker-compose up -d
+    container_id=`check_container_created $name`
+    while :
+    do
+      output=`docker exec -it $container_id /bin/sh -c "mysql -u root --password=root -e \"GRANT ALL PRIVILEGES ON *.* TO 'local'@'%';\" sys" || echo "failed"`
+      echo "Command result: $output"
+      if [[ "$output" = *"failed"* ]]; then
+        echo "Retrying post script"
+        sleep 3
+      else
+        echo "Finished post script."
+        break
+      fi
+    done
   else
     echo "Container $name, already exists"
     running_id=`check_container_running $name`
