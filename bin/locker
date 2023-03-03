@@ -5,6 +5,7 @@ import argparse
 
 LOCK_SUFFIX = ".lock"
 SAVE_SUFFIX = ".bytes"
+SAVE_LENGTH = 1000
 HEX_PATTERN = "0000FFFF0000FFFF"
 class FileLocker:
     def __init__(self):
@@ -21,7 +22,7 @@ class FileLocker:
                 output_bytes[i] = file_bytes[i] ^ byte_lock_pattern[i]
         return output_bytes
 
-    def save_bytes(self, path, length=1000):
+    def save_bytes(self, path, length=SAVE_LENGTH):
         save_path = path + SAVE_SUFFIX
         if not os.path.exists(save_path) or os.path.getsize(save_path) == 0:
             file_bytes = None
@@ -53,6 +54,16 @@ class FileLocker:
         unlock_bytes = self.generate_byte_sequence(path)
         self.apply_unlock(path, unlock_bytes)
 
+    def restore_file(self, path):
+
+        restore_path = path + SAVE_SUFFIX
+        restore_bytes = None
+        with open(restore_path, 'rb') as f_in:
+            restore_bytes = f_in.read(SAVE_LENGTH)
+
+        with open(path, 'r+b') as f_out:
+            f_out.write(restore_bytes)
+
     def lock_directory(self, dir_path):
         print(f"Locking directory {dir_path}")
         for item in os.listdir(dir_path):
@@ -79,30 +90,38 @@ class FileLocker:
             if os.path.isdir(item_path):
                 self.unlock_directory(item_path)
 
+    def restore_directory(self, dir_path):
+        print(f"Restoring directory {dir_path}")
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            restore_path = item_path + SAVE_SUFFIX
+            if os.path.isfile(item_path) and os.path.isfile(restore_path):
+                print(f"Restoring file {item_path}")
+                self.restore_file(item_path)
+
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isdir(item_path):
+                self.restore_directory(item_path)
+
     def main(self):
         parser = argparse.ArgumentParser()
-        parser.add_argument('-l', '--lock', action='store_true', default=False, help='lock the file')
-        parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock the file')
-        #parser.add_argument('--mode', choices=['lock', 'unlock'], default='lock', required=True, help='set the mode (lock or unlock)')
+        parser.add_argument('-l', '--lock', action='store_true', default=False, help='lock files')
+        parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock files')
+        parser.add_argument('-r', '--restore', action='store_true', default=False, help='restore files')
         args = vars(parser.parse_args())
         
         if args["lock"] and args["unlock"]:
             raise Exception("Lock and unlock cannot both be set.")
-        if not (args["lock"] or args["unlock"]):
-            raise Exception("One of lock or unlock must be set.")
+        if not (args["lock"] or args["unlock"] or args["restore"]):
+            raise Exception("One of lock, unlock, or restore must be set.")
 
         if args["lock"]:
             self.lock_directory(os.getcwd())
         if args["unlock"]:
             self.unlock_directory(os.getcwd())
-
-        #mode = args["mode"]
-        #if mode == 'lock':
-        #    self.lock_directory(os.getcwd())
-        #elif mode == 'unlock':
-        #    self.unlock_directory(os.getcwd())
-        #else:
-        #    raise Exception(f"Unknown mode {mode}")
+        if args["restore"]:
+            self.restore_directory(os.getcwd())
 
 file_locker = FileLocker()
 file_locker.main()
