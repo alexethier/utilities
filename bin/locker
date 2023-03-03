@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+
+import os
+import argparse
+
+LOCK_SUFFIX = ".lock"
+SAVE_SUFFIX = ".bytes"
+HEX_PATTERN = "0000FFFF0000FFFF"
+class FileLocker:
+    def __init__(self):
+        pass
+
+    def generate_byte_sequence(self, path):
+        byte_lock_pattern = bytearray.fromhex(HEX_PATTERN)
+        num_bytes = len(byte_lock_pattern)
+        output_bytes = bytearray(num_bytes)
+
+        with open(path, 'rb') as f_in:
+            file_bytes = f_in.read(num_bytes)
+            for i in range(num_bytes):
+                output_bytes[i] = file_bytes[i] ^ byte_lock_pattern[i]
+        return output_bytes
+
+    def save_bytes(self, path, length=1000):
+        if not os.path.exists(save_path) or os.path.getsize(path) == 0:
+            file_bytes = None
+            with open(path, 'rb') as f_in:
+                file_bytes = f_in.read(length)
+
+            save_path = path + SAVE_SUFFIX
+                with open(save_path, 'wb') as f_out:
+                    print(f"Saving file to {save_path}")
+                    f_out.write(file_bytes)
+
+    def apply_lock(self, path, lock_bytes):
+        with open(path, 'r+b') as f_out:
+            f_out.write(lock_bytes)
+        lock_path = path + LOCK_SUFFIX
+        os.rename(path, lock_path)
+
+    def apply_unlock(self, path, lock_bytes):
+        with open(path, 'r+b') as f_out:
+            f_out.write(lock_bytes)
+        unlock_path = path[:-len(LOCK_SUFFIX)]
+        os.rename(path, unlock_path)
+
+    def lock_file(self, path):
+        self.save_bytes(path)
+        lock_bytes = self.generate_byte_sequence(path)
+        self.apply_lock(path, lock_bytes)
+
+    def unlock_file(self, path):
+        unlock_bytes = self.generate_byte_sequence(path)
+        self.apply_unlock(path, unlock_bytes)
+
+    def lock_directory(self, dir_path):
+        print(f"Locking directory {dir_path}")
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isfile(item_path) and not (item_path.endswith("bytes") or item_path.endswith("lock")):
+                print(f"Locking file {item_path}")
+                self.lock_file(item_path)
+
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isdir(item_path):
+                self.lock_directory(item_path)
+
+    def unlock_directory(self, dir_path):
+        print(f"Unlocking directory {dir_path}")
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isfile(item_path) and item_path.endswith("lock"):
+                print(f"Unocking file {item_path}")
+                self.unlock_file(item_path)
+
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isdir(item_path):
+                self.unlock_directory(item_path)
+
+    def main(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-l', '--lock', action='store_true', default=False, help='lock the file')
+        parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock the file')
+        #parser.add_argument('--mode', choices=['lock', 'unlock'], default='lock', required=True, help='set the mode (lock or unlock)')
+        args = vars(parser.parse_args())
+        
+        if args["lock"] and args["unlock"]:
+            raise Exception("Lock and unlock cannot both be set.")
+        if not (args["lock"] or args["unlock"]):
+            raise Exception("One of lock or unlock must be set.")
+
+        if args["lock"]:
+            self.lock_directory(os.getcwd())
+        if args["unlock"]:
+            self.unlock_directory(os.getcwd())
+
+        #mode = args["mode"]
+        #if mode == 'lock':
+        #    self.lock_directory(os.getcwd())
+        #elif mode == 'unlock':
+        #    self.unlock_directory(os.getcwd())
+        #else:
+        #    raise Exception(f"Unknown mode {mode}")
+
+file_locker = FileLocker()
+file_locker.main()
