@@ -29,7 +29,7 @@ class FileLocker:
             with open(path, 'rb') as f_in:
                 file_bytes = f_in.read(length)
 
-            with open(save_path, 'r+b') as f_out:
+            with open(save_path, 'w+b') as f_out:
                 print(f"Saving file to {save_path}")
                 f_out.write(file_bytes)
 
