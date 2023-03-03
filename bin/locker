@@ -22,15 +22,15 @@ class FileLocker:
         return output_bytes
 
     def save_bytes(self, path, length=1000):
-        if not os.path.exists(save_path) or os.path.getsize(path) == 0:
+        save_path = path + SAVE_SUFFIX
+        if not os.path.exists(save_path) or os.path.getsize(save_path) == 0:
             file_bytes = None
             with open(path, 'rb') as f_in:
                 file_bytes = f_in.read(length)
 
-            save_path = path + SAVE_SUFFIX
-                with open(save_path, 'wb') as f_out:
-                    print(f"Saving file to {save_path}")
-                    f_out.write(file_bytes)
+            with open(save_path, 'r+b') as f_out:
+                print(f"Saving file to {save_path}")
+                f_out.write(file_bytes)
 
     def apply_lock(self, path, lock_bytes):
         with open(path, 'r+b') as f_out:
