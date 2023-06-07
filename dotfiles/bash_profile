@@ -1,0 +1,8 @@
+export PS1="$ "
+export PROMPT_COMMAND='history -a'
+export HISTSIZE=5000
+export HISTFILESIZE=100000
+set -o vi
+
+export CLICOLOR=1
+export LSCOLORS=ExFxBxDxCxegedabagacad
