@@ -1,0 +1,111 @@
+#!/bin/bash
+
+#set -e
+IFS=$'\n\t'
+
+# This script will find the latest docker image, launch a new container from it, and connect to that container.
+
+SELECTION="" # One of the supported db versions
+
+# Parse command line
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        -s)
+            SELECTION=$value
+            shift
+            ;;
+        --selection)
+            SELECTION=$value
+            shift
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+function check_container_created {
+  echo `docker ps -a -q -f name="$1"`
+}
+
+function check_container_running {
+  echo `docker ps -aq -f status=running -f name="$1"`
+}
+
+function write_mysql8 {
+  name="dev-mysql-8"
+  container_id=`check_container_created $name`
+
+  compose_text="
+    version: '3'
+    services:
+      db:
+        image: mysql:8.0-oracle
+        container_name: $name
+        command: --default-authentication-plugin=mysql_native_password
+        ports:
+          - \"3300:3306\"
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_USER: local
+            MYSQL_PASSWORD: local
+  "
+  echo -e "$compose_text" > ~/.aetmp_compose_dbs/docker-compose.yml
+
+  if [ -z "$container_id" ]; then
+    echo "Creating $name"
+    docker-compose up -d
+    container_id=`check_container_created $name`
+    while :
+    do
+      output=`docker exec -it $container_id /bin/sh -c "mysql -u root --password=root -e \"GRANT ALL PRIVILEGES ON *.* TO 'local'@'%';\" sys" || echo "failed"`
+      echo "Command result: $output"
+      if [[ "$output" = *"failed"* ]]; then
+        echo "Retrying post script"
+        sleep 3
+      else
+        echo "Finished post script."
+        break
+      fi
+    done
+  else
+    echo "Container $name, already exists"
+    running_id=`check_container_running $name`
+    if [ -z "$running_id" ]; then
+      echo "Starting container $name"
+      docker-compose start
+    else
+      echo "Container $name already running"
+    fi
+  fi
+}
+
+function main {
+
+  selection=`echo "$SELECTION" | tr '[:upper:]' '[:lower:]'`
+
+  mkdir -p ~/.aetmp_compose_dbs
+  cd ~/.aetmp_compose_dbs
+  #docker-compose stop
+
+  name=""
+  if [[ "$selection" == *"mysql"* ]] && [[ "$selection" == *"8"* ]]; then
+    echo "Matched selection mysql-8"
+    write_mysql8
+  else
+    echo "Unmatched selection '$selection'. Example: -s mysql8"
+    exit 1
+  fi
+  
+}
+
+main
