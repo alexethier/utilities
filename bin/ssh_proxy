@@ -1,0 +1,76 @@
+#!/bin/bash
+
+print_help() {
+  echo "Configurable options: -n <NAME>"
+  echo "Boolean flags: -l (lambda) ; -e (elastic beanstalk) -s (source env. vars)"
+}
+
+SSH_HOST="" # The ssh server acting as a proxy
+TARGET_HOST="" # The target host sitting behind a firewall
+TARGET_HOST_PORT=""
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    case $key in
+        -s)
+            SSH_HOST=$value
+            shift
+            ;;
+        --ssh)
+            SSH_HOST=$value
+            shift
+            ;;
+        -t)
+            TARGET_HOST=$value
+            shift
+            ;;
+        --target)
+            TARGET_HOST=$value
+            shift
+            ;;
+        -p)
+            TARGET_HOST_PORT=$value
+            shift
+            ;;
+        --port)
+            TARGET_HOST_PORT=$value
+            shift
+            ;;
+        -h)
+            print_help
+            exit 1
+            ;;
+        --help)
+            print_help
+            exit 1
+            ;;
+        -v)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ "$SSH_HOST" == "" ]; then
+  echo "Missing option -s <SSH_HOST>"
+  exit 1
+fi
+if [ "$TARGET_HOST" == "" ]; then
+  echo "Missing option -t <TARGET_HOST>"
+  exit 1
+fi
+if [ "$TARGET_HOST_PORT" == "" ]; then
+  echo "Missing option -p <TARGET_HOST_PORT>"
+  exit 1
+fi
+
+run_command="ssh -L $TARGET_HOST_PORT:$TARGET_HOST:$TARGET_HOST_PORT $SSH_HOST -N"
+echo "Running command: $run_command"
+output=`eval $run_command`
