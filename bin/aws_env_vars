@@ -7,7 +7,6 @@ IFS=$'\n\t'
 AWS_PROFILE=""
 NAME=""
 MODE="lambda"
-SOURCE_ENV="false"
 
 while [[ $# > 0 ]]
 do
@@ -46,12 +45,6 @@ do
             NAME=$value
             shift
             ;;
-        -s)
-            SOURCE_ENV="true"
-            ;;
-        --source)
-            SOURCE_ENV="true"
-            ;;
         -h)
             echo "Configurable options: -n <NAME>"
             echo "Boolean flags: -l (lambda) ; -e (elastic beanstalk) -s (source env. vars)"
@@ -72,6 +65,11 @@ do
     esac
     shift
 done
+
+if [ "$NAME" == "" ]; then
+  echo "Missing name: option -n <NAME>"
+  exit 1
+fi
 
 main() {
 
