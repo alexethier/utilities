@@ -1,13 +1,15 @@
 #!/bin/bash
 
 print_help() {
-  echo "Configurable options: -n <NAME>"
-  echo "Boolean flags: -l (lambda) ; -e (elastic beanstalk) -s (source env. vars)"
+  echo "Configurable options: -s <SSH_SERVER_ACTING_AS_PROXY> -p <TARGET_PORT>"
+  echo "Boolean flags: -t <TARGET_HOST or default 127.0.0.1> -d (dev mode or not) -l <LOCAL_PORT>"
 }
 
+DEV_MODE="false"
 SSH_HOST="" # The ssh server acting as a proxy
-TARGET_HOST="" # The target host sitting behind a firewall
+TARGET_HOST="127.0.0.1" # The target host sitting behind a firewall
 TARGET_HOST_PORT=""
+LOCAL_HOST_PORT=""
 
 while [[ $# > 0 ]]
 do
@@ -38,6 +40,20 @@ do
         --port)
             TARGET_HOST_PORT=$value
             shift
+            ;;
+        -l)
+            LOCAL_HOST_PORT=$value
+            shift
+            ;;
+        --local-port)
+            LOCAL_HOST_PORT=$value
+            shift
+            ;;
+        -d)
+            DEV_MODE="true"
+            ;;
+        --dev)
+            DEV_MODE="true"
             ;;
         -h)
             print_help
@@ -71,6 +87,13 @@ if [ "$TARGET_HOST_PORT" == "" ]; then
   exit 1
 fi
 
-run_command="ssh -L $TARGET_HOST_PORT:$TARGET_HOST:$TARGET_HOST_PORT $SSH_HOST -N"
+if [ "$LOCAL_HOST_PORT" == "" ]; then
+  LOCAL_HOST_PORT=$TARGET_HOST_PORT
+fi
+
+run_command="ssh -L $LOCAL_HOST_PORT:$TARGET_HOST:$TARGET_HOST_PORT $SSH_HOST -N"
 echo "Running command: $run_command"
-output=`eval $run_command`
+
+if [ "$DEV_MODE" == "false" ]; then
+  output=`eval $run_command`
+fi

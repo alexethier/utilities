@@ -90,8 +90,8 @@ def main():
     try:
       extracted, is_json = extract(line)
     except:
-      print("[ERROR]: Extract failed to parse line:")
-      print(line)
+      print("[ERROR]: Extract failed to parse line:", flush=True)
+      print(line, flush=True)
 
     if extracted:
       output = extracted
@@ -105,8 +105,8 @@ def main():
 
       if not args['no_split_lines']:
         for output_line in formatted_output.split(sep='\\n'):
-          print(output_line)
+          print(output_line, flush=True)
       else:
-        print(output)
+        print(output, flush=True)
 
 main()
