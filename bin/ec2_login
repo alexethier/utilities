@@ -14,7 +14,8 @@ REGION="us-east-1"
 LOGIN=false
 SSHUTTLE=false
 USE_PORTS=false
-PORTS=()
+PORT_OFFSET=0 # When port forwarding, offset the local port by this much, useful when forwarding the same port from different machines
+PORTS=() # Ports to remote forward
 STOP=false
 PORT_FORWARD_ADDRESS="127.0.0.1"
 
@@ -44,6 +45,10 @@ do
         --port)
             USE_PORTS=true
             PORTS+=($value)
+            shift
+            ;;
+        --port-offset)
+            PORT_OFFSET=$value
             shift
             ;;
         -s)
@@ -99,12 +104,12 @@ do
             shift
             ;;
         -h)
-            echo "Configurable options: -i <INSTANCE ID> -r <REGION> -u <USERNAME> -p <PORT> -a <PORT FORWARDING ADDRESS>"
+            echo "Configurable options: -i <INSTANCE ID> -r <REGION> -u <USERNAME> -p <PORT> -a <PORT FORWARDING ADDRESS> --port-offset <LOCAL PORT OFFSET>"
             echo "Boolean flags: -l (login) ; -s (run sshuttle) -t (stop instance)"
             exit 1
             ;;
         --help)
-            echo "Configurable options: -i <INSTANCE ID> -r <REGION> -u <USERNAME> -p <PORT> -a <PORT FORWARDING ADDRESS>"
+            echo "Configurable options: -i <INSTANCE ID> -r <REGION> -u <USERNAME> -p <PORT> -a <PORT FORWARDING ADDRESS> --port-offset <LOCAL PORT OFFSET>"
             echo "Boolean flags: -l (login) ; -s (run sshuttle) -t (stop instance)"
             exit 1
             ;;
@@ -211,7 +216,8 @@ main() {
     echo "Remote forwarding $PORT_FORWARD_ADDRESS:${PORTS[@]} on $id to localhost"
     connect_string=""
     for port in "${PORTS[@]}"; do
-      connect_string="$connect_string -L $port:$PORT_FORWARD_ADDRESS:$port "
+      local_port=$((port + PORT_OFFSET))
+      connect_string="$connect_string -L $local_port:$PORT_FORWARD_ADDRESS:$port "
     done
     forward_command="ssh -o StrictHostKeyChecking=accept-new $connect_string $USER@$PUBLIC_IP -N"
     eval $forward_command
