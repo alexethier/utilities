@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# This is a shortcut for the command: cut -d'<DELIM> -f<COLUMN #>
+# cut works pretty well, but tr -s ' ' is often needed when DELIM=' ' and there are consecutive whitespaces
+# Additionally, this script trims whitespace from the start/end of the string
+
+column="$1"
+delim=" "
+
+if [ -z "column" ]; then
+  echo "Missing single input argument - column number."
+fi
+
+if [ ! -z "$2" ]; then
+  delim="$2"
+fi
+
+while IFS= read -r line; do
+    echo "$line" | tr -s ' ' | cut -d"$delim" -f${column} | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+done
+
