@@ -18,4 +18,3 @@ fi
 while IFS= read -r line; do
     echo "$line" | tr -s ' ' | cut -d"$delim" -f${column} | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 done
-

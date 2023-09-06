@@ -64,9 +64,9 @@ def get_keys(input_json, keys):
   if isinstance(input_json, dict):
     for key in keys:
       if key in input_json:
-        return input_json[key]
-    for key in input_json:
-      found = get_keys(input_json[key], keys)
+        yield input_json[key]
+    for field in input_json:
+      found = get_keys(input_json[field], keys)
       if found:
         return found
   elif isinstance(input_json, list):
@@ -79,7 +79,7 @@ def get_keys(input_json, keys):
 def main():
 
   parser = argparse.ArgumentParser()
-  parser.add_argument("--no-split-lines", help="Do not split new lines.", action="store_true")
+  parser.add_argument("--no-split-lines", help="Disable automatic splitting of new lines.", action="store_true")
   parser.add_argument("--key", help="If a line is json containing a key, only print the value of the key", action='append')
   args = vars(parser.parse_args())
 
@@ -94,19 +94,19 @@ def main():
       print(line, flush=True)
 
     if extracted:
-      output = extracted
+      output_list = [ extracted ]
       if is_json:
         if args['key']:
-          output_val = get_keys(extracted, args['key'])
+          output_val = list(get_keys(extracted, args['key']))
           if output_val:
-            output = output_val
+            output_list = output_val
 
-      formatted_output = format_json(output)
-
-      if not args['no_split_lines']:
-        for output_line in formatted_output.split(sep='\\n'):
-          print(output_line, flush=True)
-      else:
-        print(output, flush=True)
+      for output in output_list:
+        if not args['no_split_lines']:
+          formatted_output = format_json(output)
+          for output_line in formatted_output.split(sep='\\n'):
+            print(output_line, flush=True)
+        else:
+          print(output, flush=True)
 
 main()
