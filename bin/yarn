@@ -38,6 +38,7 @@ do
             fi
             ;;
         -v)
+            set -x
             if [ "$MAIN_YARN" == "false" ]; then
                 VERBOSE=true
             else
@@ -45,6 +46,7 @@ do
             fi
             ;;
         --verbose)
+            set -x
             if [ "$MAIN_YARN" == "false" ]; then
                 VERBOSE=true
             else
@@ -62,20 +64,30 @@ done
 # Only run yarn build if source files have changed.
 
 YARN_COMMAND="${ARGS[0]}"
+YARN_COMMAND_HASH=`echo ${YARN_COMMAND} | md5sum | cut -d' ' -f1`
+CHECKSUM_FILE_PATH="./node_modules/yarn.${YARN_COMMAND_HASH}.checksum"
 YARN_FULL_COMMAND="/opt/node/bin/yarn ${ARGS[*]}"
-NEW_CHECKSUM=`git ls-files | sort | xargs -I {} cat {} | md5sum | cut -d' ' -f1`
-OLD_CHECKSUM=`cat ./node_modules/yarn.${YARN_COMMAND}.checksum`
-
-if [ "$VERBOSE" == "true" ]; then
-    echo "Current checksum: $NEW_CHECKSUM"
-    echo "Old Checksum: $OLD_CHECKSUM"
-    echo "Main command: $YARN_COMMAND"
-    echo "Full yarn command: $YARN_FULL_COMMAND"
-fi
-
-if [ "$NEW_CHECKSUM" != "$OLD_CHECKSUM" ] || [ "$FORCE" == "true" ];then
-  eval $YARN_FULL_COMMAND
-  echo "$NEW_CHECKSUM" > ./node_modules/yarn.${YARN_COMMAND}.checksum
+if [[ -f "$CHECKSUM_FILE_PATH" ]]; then
+    OLD_CHECKSUM=`cat $CHECKSUM_FILE_PATH`
+    NEW_CHECKSUM=`git ls-files | sort | xargs -I {} cat {} | md5sum | cut -d' ' -f1`
+    
+    if [ "$VERBOSE" == "true" ]; then
+        echo "Current checksum: $NEW_CHECKSUM"
+        echo "Old Checksum: $OLD_CHECKSUM"
+        echo "Main command: $YARN_COMMAND"
+        echo "Full yarn command: $YARN_FULL_COMMAND"
+    fi
+    
+    if [ "$NEW_CHECKSUM" != "$OLD_CHECKSUM" ] || [ "$FORCE" == "true" ];then
+      eval $YARN_FULL_COMMAND
+      echo "$NEW_CHECKSUM" > ./node_modules/yarn.${YARN_COMMAND_HASH}.checksum
+    else
+      echo "No changes detected, skipping yarn command: $YARN_FULL_COMMAND"
+    fi
 else
-  echo "No changes detected, skipping yarn command: $YARN_FULL_COMMAND"
+  eval $YARN_FULL_COMMAND
+  if [[ -d "./node_modules" ]]; then
+      NEW_CHECKSUM=`git ls-files | sort | xargs -I {} cat {} | md5sum | cut -d' ' -f1`
+      echo "$NEW_CHECKSUM" > ./node_modules/yarn.${YARN_COMMAND_HASH}.checksum
+  fi
 fi
