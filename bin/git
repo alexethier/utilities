@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# JGit will break if the user
+# sets their gpg format to ssh
+# because it doesn't support it
+# which breaks nifi compilation
+# to circumvent this, set the gpg format
+# everytime the cli is invoked.
+/usr/bin/git -c gpg.format=ssh $@
