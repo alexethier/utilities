@@ -1,4 +1,5 @@
 #!/bin/bash
+# set -x
 
 # JGit will break if the user
 # sets their gpg format to ssh

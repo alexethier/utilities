@@ -12,13 +12,14 @@ print_help () {
   echo ""
   echo "Basic usage: rsed 's/find/replace/g'"
   echo ""
-  echo "Advanced usage: rsed -e 's/find/replace/g' -d '/path/to/dir'"
+  echo "Advanced usage: rsed -e 's/find/replace/g' -d '/path/to/dir' -f '/path/to/file.txt'"
 }
 
 EXPRESSION="$1"
 NUM_ARGS="$#"
 STDIN="false"
 SED_DIR="."
+SED_FILE=""
 
 if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
 
@@ -52,6 +53,14 @@ if [[ "$NUM_ARGS" != "1" || $1 = -* ]]; then
                 ;;
             --dir)
                 SED_DIR="$value"
+                shift
+                ;;
+            -f)
+                SED_FILE="$value"
+                shift
+                ;;
+            --file)
+                SED_FILE="$value"
                 shift
                 ;;
             -v)
@@ -93,5 +102,9 @@ while test ! -t 0 ; do
 done
 
 if [[ "$STDIN" == "false" ]]; then
-  apply_sed "${SED_DIR}"
+  if [[ "$SED_FILE" != "" ]]; then
+      apply_sed "${SED_FILE}"
+  else
+      apply_sed "${SED_DIR}"
+  fi
 fi
