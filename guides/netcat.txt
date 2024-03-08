@@ -1,0 +1,3 @@
+# Netcat proxy
+# Listens on 8080, and writes to google.com
+ncat -lkv localhost 8080 -c 'tee /dev/stderr | ncat -v google.com  443 | tee /dev/stderr'
