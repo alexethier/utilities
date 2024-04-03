@@ -1,8 +1,3 @@
-# Netcat proxy
-# Listens on 8080, and writes to google.com
-ncat -lkv localhost 8080 -c 'tee /dev/stderr | ncat -v google.com  443 | tee /dev/stderr'
-
-$ cat cors-http-proxy.sh 
 #!/bin/sh -e
 
 if [ $# != 3 ]
@@ -13,6 +8,8 @@ fi
 
 while true; do
     TMP=`mktemp -d`
+    echo "Working dir $TMP"
+    LOG=$TMP/out.log
     BACK=$TMP/pipe.back
     SENT=$TMP/pipe.sent
     RCVD=$TMP/pipe.rcvd
@@ -20,10 +17,8 @@ while true; do
     mkfifo -m 0600 "$BACK" "$SENT" "$RCVD"
     sed 's/^/ => /' <"$SENT" &
     sed 's/^/<=  /' <"$RCVD" &
-    nc -l localhost $1 <"$BACK" | sed -u "s/^Host: .*$/Host: $2:$3/" | tee "$SENT" | nc "$2" "$3" | sed -u "/^Date: /a\\
+    nc -l localhost $1 <"$BACK" | sed -u "s/^Host: .*$/Host: $2:$3/" | tee "$LOG" | tee "$SENT" | nc "$2" "$3" | sed -u "/^Date: /a\\
 Access-Control-Allow-Origin: *
 " | tee "$RCVD" >"$BACK"
 
 done
-
-socat -v tcp4-listen:8443,reuseaddr,fork ssl:datavolo-auth-dev.auth.us-east-1.amazoncognito.com:443,verify=0

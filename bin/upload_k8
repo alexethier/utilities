@@ -1,0 +1,133 @@
+#!/bin/bash
+
+NAMESPACE=""
+POD=""
+CONTAINER=""
+EXTENSION_PATH=/nifi/configuration_resources/extensions
+MODULE_PATH="."
+FILTER=`echo "-gfr .*.nar$"`
+DRY_RUN=false
+
+function help() {
+    echo "Usage: upload_k8"
+    echo " -n : Namespace"
+    echo " -p : Pod"
+    echo " -c : Container"
+    echo " -m : Module path"
+    echo " -f : Filters"
+}
+
+while [[ $# > 0 ]]
+do
+    key="$1"
+    value="$2"
+
+    # If arguments come in the form a=b
+    if [[ $1 == *'='* ]]
+    then
+        IFS='=' read -ra key_pair <<< "$1"
+        key="${key_pair[0]}"
+        value="${key_pair[1]}"
+    fi
+
+    case $key in
+        -n)
+            NAMESPACE="$value"
+            shift
+            ;;
+        --name)
+            NAMESPACE="$value"
+            shift
+            ;;
+        -p)
+            POD="$value"
+            shift
+            ;;
+        --pod)
+            POD="$value"
+            shift
+            ;;
+        -c)
+            CONTAINER="$value"
+            shift
+            ;;
+        --container)
+            CONTAINER="$value"
+            shift
+            ;;
+        -m)
+            MODULE_PATH="$value"
+            shift
+            ;;
+        --module)
+            MODULE_PATH="$value"
+            shift
+            ;;
+        -f)
+            FILTER="$value"
+            shift
+            ;;
+        --filter)
+            FILTER="$value"
+            shift
+            ;;
+        -d)
+            DRY_RUN=true
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            ;;
+        -v)
+            set -x
+            ;;
+        -h)
+            help
+            exit 0
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            help
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+COMMAND_SAVE=~/.aetmp/kube_upload.txt
+if [ -f $COMMAND_SAVE ]; then
+    if [ ! -n "$NAMESPACE" ]; then
+        NAMESPACE=`cat $COMMAND_SAVE | grep "NAMESPACE" | cut -d '=' -f2`
+    fi
+    if [ ! -n "$POD" ]; then
+        POD=`cat $COMMAND_SAVE | grep "POD" | cut -d '=' -f2`
+    fi
+    if [ ! -n "$CONTAINER" ]; then
+        CONTAINER=`cat $COMMAND_SAVE | grep "CONTAINER" | cut -d '=' -f2`
+    fi
+    if [ ! -n "$MODULE_PATH" ]; then
+        MODULE_PATH=`cat $COMMAND_SAVE | grep "MODULE_PATH" | cut -d '=' -f2`
+    fi
+    if [ ! -n "$FILTER" ]; then
+        FILTER=`cat $COMMAND_SAVE | grep "FILTER" | cut -d '=' -f2`
+    fi
+fi
+
+mkdir -p ~/.aetmp
+echo "NAMESPACE=$NAMESPACE" > $COMMAND_SAVE
+echo "POD=$POD" >> $COMMAND_SAVE
+echo "CONTAINER=$CONTAINER" >> $COMMAND_SAVE
+echo "MODULE_PATH=$MODULE_PATH" >> $COMMAND_SAVE
+echo "FILTER=$FILTER" >> $COMMAND_SAVE
+
+echo "Uploading:"
+echo ""
+zind $FILTER
+
+zind $FILTER | while read line; do
+  name=`basename "$line"`
+  if [ $DRY_RUN == "true" ]; then
+      echo "kubectl cp -n $NAMESPACE -c $CONTAINER $line $POD:$EXTENSION_PATH/$MODULE_PATH/$name"
+  else
+      kubectl cp -n $NAMESPACE -c $CONTAINER $line $POD:$EXTENSION_PATH/$MODULE_PATH/$name
+  fi
+done
