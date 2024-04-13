@@ -95,11 +95,13 @@ apply_sed () {
   fi
 }
 
-while test ! -t 0 ; do
-  read -r stdin
-  STDIN="true"
-  apply_sed "$stdin"
-done
+if [ "$SED_FILE" == "" ]; then
+  while test ! -t 0 ; do
+    read -r stdin
+    STDIN="true"
+    apply_sed "$stdin"
+  done
+fi
 
 if [[ "$STDIN" == "false" ]]; then
   if [[ "$SED_FILE" != "" ]]; then
