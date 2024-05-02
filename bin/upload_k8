@@ -1,5 +1,7 @@
 #!/bin/bash
 
+PROFILE="default" # File profile to save variables
+CONTEXT=""
 NAMESPACE=""
 POD=""
 CONTAINER=""
@@ -11,11 +13,13 @@ DRY_RUN=false
 
 function help() {
     echo "Usage: upload_k8"
+    echo " -o : Context"
     echo " -n : Namespace"
     echo " -p : Pod"
     echo " -c : Container"
     echo " -m : Module path"
     echo " -f : Filters"
+    echo " -s : Profile to save/load variables"
     echo " -d : Set dry run on"
 }
 
@@ -33,6 +37,14 @@ do
     fi
 
     case $key in
+        -o)
+            CONTEXT="$value"
+            shift
+            ;;
+        --context)
+            CONTEXT="$value"
+            shift
+            ;;
         -n)
             NAMESPACE="$value"
             shift
@@ -73,6 +85,14 @@ do
             FILTER="$value"
             shift
             ;;
+        -s)
+            PROFILE="$value."
+            shift
+            ;;
+        --profile)
+            PROFILE="$value."
+            shift
+            ;;
         -d)
             DRY_RUN=true
             ;;
@@ -95,8 +115,11 @@ do
     shift
 done
 
-COMMAND_SAVE=~/.aetmp/kube_upload.txt
+COMMAND_SAVE=~/.aetmp/${PROFILE}kube_upload.txt
 if [ -f $COMMAND_SAVE ]; then
+    if [ ! -n "$CONTEXT" ]; then
+        CONTEXT=`cat $COMMAND_SAVE | grep "CONTEXT" | cut -d '=' -f2`
+    fi
     if [ ! -n "$NAMESPACE" ]; then
         NAMESPACE=`cat $COMMAND_SAVE | grep "NAMESPACE" | cut -d '=' -f2`
     fi
@@ -115,13 +138,14 @@ if [ -f $COMMAND_SAVE ]; then
 fi
 
 mkdir -p ~/.aetmp
-echo "NAMESPACE=$NAMESPACE" > $COMMAND_SAVE
+echo "CONTEXT=$CONTEXT" > $COMMAND_SAVE
+echo "NAMESPACE=$NAMESPACE" >> $COMMAND_SAVE
 echo "POD=$POD" >> $COMMAND_SAVE
 echo "CONTAINER=$CONTAINER" >> $COMMAND_SAVE
 echo "MODULE_PATH=$MODULE_PATH" >> $COMMAND_SAVE
 echo "FILTER=$FILTER" >> $COMMAND_SAVE
 
-echo "Uploading:"
+echo "Uploading to $CONTEXT $NAMESPACE:$CONTAINER:$POD:$EXTENSION_PATH/$MODULE_PATH"
 echo ""
 zind $FILTER
 echo ""
@@ -129,8 +153,8 @@ echo ""
 zind $FILTER | while read line; do
   name=`basename "$line"`
   if [ $DRY_RUN == "true" ]; then
-      echo "kubectl cp -n $NAMESPACE -c $CONTAINER $line $POD:$EXTENSION_PATH/$MODULE_PATH/$name"
+      echo "kubectl cp --context $CONTEXT -n $NAMESPACE -c $CONTAINER $line $POD:$EXTENSION_PATH/$MODULE_PATH/$name"
   else
-      kubectl cp -n $NAMESPACE -c $CONTAINER $line $POD:$EXTENSION_PATH/$MODULE_PATH/$name
+      kubectl cp --context $CONTEXT -n $NAMESPACE -c $CONTAINER $line $POD:$EXTENSION_PATH/$MODULE_PATH/$name
   fi
 done
