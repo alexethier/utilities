@@ -45,8 +45,10 @@ done
 
 cd ./nifi
 
+/opt/nifi/bin/nifi.sh stop &
+
 if [ "$SKIP_BUILD" == "false" ]; then
-    ./mvnw -T4 clean install -DskipTests
+    ./mvnw -T4 clean install -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
 fi
 
 # Get backup version
