@@ -1,0 +1,7 @@
+# Insert a cluster context entry into the kube config, which k9s can connect to:
+```
+# Login to the appropriate EKS cluster AWS account
+auth-aws sso dev
+# Load the cluster config with alias
+aws eks update-kubeconfig --name cloud --alias cloud-dev
+```
