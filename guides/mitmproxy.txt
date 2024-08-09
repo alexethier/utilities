@@ -1,0 +1,25 @@
+# mitmproxy
+
+mitmproxy is a recommended proxy to observe HTTP traffic that is generated.
+On the MacOS, most proxy services (like curl and the browser) are set by setting the OS' system level proxy.
+
+To get maven/java to use the proxy set this in settings.xml:
+
+```
+    <proxies>
+      <proxy>
+        <id>http-proxy</id>
+        <active>true</active>
+        <protocol>http</protocol>
+        <host>localhost</host>
+        <port>8080</port>
+      </proxy>
+      <proxy>
+        <id>https-proxy</id>
+        <active>true</active>
+        <protocol>https</protocol>
+        <host>localhost</host>
+        <port>8443</port>
+      </proxy>
+    </proxies>
+```

@@ -1,5 +1,7 @@
 #!/bin/sh -e
 
+# set -x
+
 if [ $# != 3 ]
 then
     echo "usage: $0 <src-port> <dst-host> <dst-port>"
@@ -17,7 +19,7 @@ while true; do
     mkfifo -m 0600 "$BACK" "$SENT" "$RCVD"
     sed 's/^/ => /' <"$SENT" &
     sed 's/^/<=  /' <"$RCVD" &
-    nc -l localhost $1 <"$BACK" | sed -u "s/^Host: .*$/Host: $2:$3/" | tee "$LOG" | tee "$SENT" | nc "$2" "$3" | sed -u "/^Date: /a\\
+    nc -l 127.0.0.1 $1 <"$BACK" | sed -u "s/^Host: .*$/Host: $2:$3/" | tee "$LOG" | tee "$SENT" | nc "$2" "$3" | sed -u "/^Date: /a\\
 Access-Control-Allow-Origin: *
 " | tee "$RCVD" >"$BACK"
 
