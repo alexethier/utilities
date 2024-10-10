@@ -6,6 +6,9 @@ IFS=$'\n\t'
 
 cd $(readlink -f "$(dirname "$0")") # Example command to move to dir containing script.
 
+EXAMPLE=""
+EXAMPLE_TWO=""
+
 # Example way to parse bash arguments in a more general way.
 
 # Parse command line
@@ -42,6 +45,21 @@ do
     esac
     shift
 done
+
+COMMAND_SAVE=~/.aetmp/example.txt
+if [ -f $COMMAND_SAVE ]; then
+    if [ ! -n "$EXAMPLE_TWO" ]; then
+        EXAMPLE_TWO=`cat $COMMAND_SAVE | grep "EXAMPLE_TWO" | cut -d '=' -f2`
+    fi
+fi
+
+mkdir -p ~/.aetmp
+echo "EXAMPLE_TWO=$EXAMPLE_TWO" > $COMMAND_SAVE
+
+if [ -z "${EXAMPLE_TWO}" ]; then
+  echo "Error: EXAMPLE_TWO is not set, use --example-two <value> to set." >&2
+  exit 1
+fi
 
 echo "Example Two: |$EXAMPLE_TWO|"
 echo "Example: |$EXAMPLE|"
