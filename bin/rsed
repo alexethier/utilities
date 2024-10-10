@@ -89,8 +89,10 @@ apply_sed () {
       SUFFIX=".tmp.delme.bak"
       files=`find $filepath -type f`
       for path in $files; do
-          sed -i"$SUFFIX" -e "$EXPRESSION" $path
-          rm -f "${path}${SUFFIX}"
+          if grep -q "text" <(file "$path" | cut -d':' -f2); then # Only operate on text files
+              sed -i"$SUFFIX" -e "$EXPRESSION" $path
+              rm -f "${path}${SUFFIX}"
+          fi
       done
   fi
 }
