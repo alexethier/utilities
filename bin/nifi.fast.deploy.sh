@@ -52,12 +52,12 @@ if [ "$SKIP_BUILD" == "false" ]; then
 fi
 
 # Get backup version
-next_version=`ls -1 /opt/ | grep nifi | grep backup | sort -r | head -n 1 | cut -d'-' -f1 | cut -c '7-'`
+next_version=`ls -1 /opt/ | grep nifi | grep backup | sort -rV | head -n 1 | cut -d'-' -f1 | cut -c '7-'`
 nifi_name=`readlink -f /opt/nifi | xargs basename`
 
 build_dir=`ls -1 nifi-assembly/target/ | grep -e nifi.*bin | grep -v zip | xargs basename`
 build_name=`ls -1 nifi-assembly/target/$build_dir | xargs basename`
-if [ -d "/opt/$build_name" ]; then
+if [ -d "/opt/$nifi_name" ]; then
     rm -f /opt/nifi/conf/archive/*
     /opt/nifi/bin/nifi.sh stop
 
