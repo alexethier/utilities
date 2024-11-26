@@ -7,4 +7,4 @@
 # which breaks nifi compilation
 # to circumvent this, set the gpg format
 # everytime the cli is invoked.
-/usr/bin/git -c gpg.format=ssh $@
+/usr/bin/git -c gpg.format=ssh "$@"
