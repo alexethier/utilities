@@ -1,0 +1,4 @@
+sfid # Check logins
+sf workspace create --cloud # Create Workspace
+sf ws list # List Workspace
+sf ws ssh <ID> # Connect to Workspace
