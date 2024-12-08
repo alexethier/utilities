@@ -19,17 +19,6 @@ do
     value="$2"
     set -u
 
-    ## If arguments come in the form a=b
-    #if [[ $1 == *'='* ]]
-    #then
-    #    IFS='=' read -ra key_pair <<< "$1"
-    #    key="${key_pair[0]}"
-    #    value="${key_pair[1]}"
-    #fi
-
-    #echo "debug -- KEY IS |$key|"
-    #echo "debug -- VALUE IS |$value|"
-
     case $key in
         --example-two)
             EXAMPLE_TWO="$value"
@@ -37,6 +26,12 @@ do
             ;;
         --example)
             EXAMPLE="flag_setting"
+            ;;
+        -v)
+            set -x
+            ;;
+        --verbose)
+            set -x
             ;;
         *)
             echo "Unknown option passed: $key"
