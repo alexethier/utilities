@@ -1,6 +1,17 @@
 #!/bin/bash
 # set -x
 
+if [[ "$1" == "save" ]]; then
+    set -e
+    current_branch=`git branch --show-current`
+    latest_saved_version=`git branch | grep "aetmp" | cut -d'p' -f2 | sort -Vr | head -n 1`
+    new_branch_name="aetmp$((latest_saved_version + 1))"
+    git checkout -b $new_branch_name
+    echo "Created new backup branch: $new_branch_name"
+    git checkout $current_branch
+    exit 0
+fi
+
 # JGit will break if the user
 # sets their gpg format to ssh
 # because it doesn't support it
