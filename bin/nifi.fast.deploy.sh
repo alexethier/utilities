@@ -40,7 +40,7 @@ cd ./nifi
 /opt/nifi/bin/nifi.sh stop &
 
 if [ "$SKIP_BUILD" == "false" ]; then
-    ./mvnw -T4 clean install -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
+    ./mvnw -T2.0C clean install -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
 fi
 
 # Get backup version
@@ -59,7 +59,7 @@ if [ -n "$nifi_name" ] && [ -d "/opt/$nifi_name" ]; then
 fi
 
 sudo cp -r nifi-assembly/target/$build_dir/$build_name /opt/
-sudo /bin/bash -c "cd /opt && ln -sf $build_name nifi"
+sudo /bin/bash -c "cd /opt && ln -sf -h $build_name nifi" # On MacOS the '-h' is essential to prevent bizzare behavior.
 
 if [ -n "$next_version" ]; then
     echo "Copying configs from /opt/backup${next_version}-$nifi_name"
