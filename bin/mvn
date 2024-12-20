@@ -1,0 +1,10 @@
+#!/bin/bash
+# set -x
+
+if [[ "$1" == "fast" ]]; then
+    set -e
+    mvn clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
+    exit 0
+fi
+
+$M2_HOME/bin/mvn "$@"
