@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+ONLY_BUILD=false
 SKIP_BUILD=false
 
 # Parse command line
@@ -10,6 +11,12 @@ do
     value="$2"
 
     case $key in
+        -b)
+            ONLY_BUILD=true
+            ;;
+        --only-build)
+            ONLY_BUILD=true
+            ;;
         -s)
             SKIP_BUILD=true
             ;;
@@ -42,6 +49,9 @@ cd ./nifi
 if [ "$SKIP_BUILD" == "false" ]; then
     ./mvnw -T2.0C clean install -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
 fi
+if [ "$ONLY_BUILD" == "true" ]; then
+    exit 0
+fi
 
 # Get backup version
 next_version=`ls -1 /opt/ | grep nifi | grep backup | sort -rV | head -n 1 | cut -d'-' -f1 | cut -c '7-'`
@@ -59,6 +69,7 @@ if [ -n "$nifi_name" ] && [ -d "/opt/$nifi_name" ]; then
 fi
 
 sudo cp -r nifi-assembly/target/$build_dir/$build_name /opt/
+echo "Copied nifi-assembly/target/$build_dir/$build_name to /opt/"
 sudo /bin/bash -c "cd /opt && ln -sf -h $build_name nifi" # On MacOS the '-h' is essential to prevent bizzare behavior.
 
 if [ -n "$next_version" ]; then
