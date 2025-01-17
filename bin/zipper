@@ -1,0 +1,108 @@
+#!/bin/bash
+
+set -eu -o pipefail
+IFS=$'\n\t'
+
+HELP_TEXT="zipper -o <filename>: Open or unzip a zip file.\nzipper -c: Close or create a zip file from a previously unzipped directory"
+PROPERTIES_FILE="UNZIP_PROPERTIES.txt"
+UNZIP_PREFIX="aetmp"
+OPEN_FILEPATH=""
+CLOSE_DIR="false"
+
+# Parse command line
+while [[ $# > 0 ]]
+do
+    key="$1"
+    set +u
+    value="$2"
+    set -u
+
+    case $key in
+        --open)
+            OPEN_FILEPATH="$value"
+            shift
+            ;;
+        -o)
+            OPEN_FILEPATH="$value"
+            shift
+            ;;
+        --close)
+            CLOSE_DIR="true"
+            ;;
+        -c)
+            CLOSE_DIR="true"
+            ;;
+        --help)
+            echo -e $HELP_TEXT
+            ;;
+        -h)
+            echo -e $HELP_TEXT
+            ;;
+        -v)
+            set -x
+            ;;
+        --verbose)
+            set -x
+            ;;
+        *)
+            echo "Unknown option passed: $key"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [ -n "${OPEN_FILEPATH}" ]; then
+    if [ ! -f "${OPEN_FILEPATH}" ]; then
+        echo "'$OPEN_FILEPATH' is not a valid file."
+        exit 1
+    fi
+
+    parent_dir=`dirname ${OPEN_FILEPATH}`
+    filename=`basename ${OPEN_FILEPATH}`
+    workdir="$parent_dir/${UNZIP_PREFIX}_${filename}"
+    if [ -d "$workdir" ]; then
+        echo "'Work directory '$workdir' already exists."
+    fi
+
+    mkdir $workdir
+    cp ${OPEN_FILEPATH} $workdir
+    echo "filename=$filename" >> "$workdir/$PROPERTIES_FILE"
+    cd $workdir && unzip $filename
+fi
+
+if [ "$CLOSE_DIR" == "true" ]; then
+    while true; do
+        if [ -f "./$PROPERTIES_FILE" ]; then
+            break
+        else
+            current_cwd=`pwd`
+            parent_path=`dirname $current_cwd`
+            if [ "$parent_path" == "$current_cwd" ]; then
+                echo "Cannot find any $PROPERTIES_FILE in directory hierarchy"
+                exit 1
+            fi
+            cd $parent_path
+        fi
+    done
+    
+    orig_filename=`cat "./$PROPERTIES_FILE" | grep filename | cut -d'=' -f2-`
+    zipped_dirname=`pwd | xargs basename`
+    echo "Found zip properties at $zipped_dirname"
+    if [ -f "../$orig_filename" ]; then
+        mv "../$orig_filename" "../backup.$orig_filename"
+    fi
+
+    rm -f $PROPERTIES_FILE
+    rm -f $orig_filename
+    echo "Creating $orig_filename by zipping *"
+    zip -r ../$orig_filename *
+
+    if [[ "$zipped_dirname" == "$UNZIP_PREFIX"* ]]; then
+        cd ..
+        parent_path=`pwd`
+        rm -rf $zipped_dirname
+        echo ""
+        echo "Run the following to get back to the dir: cd $parent_path"
+    fi
+fi
