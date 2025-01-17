@@ -1,0 +1,45 @@
+#!/bin/bash
+JAVA_LICENSE_LINES=4
+RESOURCE_LICENSE_LINES=4
+
+# Check if a file path is provided
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <file_path>"
+    exit 1
+fi
+
+process_java_file() {
+    local input_file="$1"
+    
+    tail -n +$((JAVA_LICENSE_LINES+1)) "$input_file" > "${input_file}.tmp" && mv "${input_file}.tmp" "$input_file"
+    
+    if [ -z "$(head -n 1 "$input_file")" ]; then
+        tail -n +2 "$input_file" > "${input_file}.tmp" && mv "${input_file}.tmp" "$input_file"
+    fi
+}
+
+process_pom_file() {
+    local input_file="$1"
+    sed '2,5d' "$input_file" > "${input_file}.tmp" && mv "${input_file}.tmp" "$input_file"
+}
+
+process_resources_file() {
+    local input_file="$1"
+
+    tail -n +$((RESOURCE_LICENSE_LINES+1)) "$input_file" > "${input_file}.tmp" && mv "${input_file}.tmp" "$input_file"
+    #if [ -z "$(head -n 1 "$input_file")" ]; then
+    #    tail -n +2 "$input_file" > "${input_file}.tmp" && mv "${input_file}.tmp" "$input_file"
+    #fi
+}
+
+file_path="$1"
+if [[ "$file_path" == *.java ]]; then
+    process_java_file "$file_path"
+elif [[ "$(basename "$file_path")" == "pom.xml" ]]; then
+    process_pom_file "$file_path"
+elif [[ "$1" == *resources* ]]; then
+    process_resources_file "$file_path"
+else
+    echo "Error: $file_path is not a .java file."
+    exit 1
+fi
