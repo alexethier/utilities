@@ -3,11 +3,12 @@
 set -eu -o pipefail
 IFS=$'\n\t'
 
-HELP_TEXT="zipper -o <filename>: Open or unzip a zip file.\nzipper -c: Close or create a zip file from a previously unzipped directory"
+HELP_TEXT="zipper -o <filename>: Open or unzip a zip file.\nzipper -c: Close or create a zip file from a previously unzipped directory\n -z: Skip making a backup file"
 PROPERTIES_FILE="UNZIP_PROPERTIES.txt"
 UNZIP_PREFIX="aetmp"
 OPEN_FILEPATH=""
 CLOSE_DIR="false"
+SKIP_BACKUP="false"
 
 # Parse command line
 while [[ $# > 0 ]]
@@ -31,6 +32,12 @@ do
             ;;
         -c)
             CLOSE_DIR="true"
+            ;;
+        --skip-backup)
+            SKIP_BACKUP="true"
+            ;;
+        -z)
+            SKIP_BACKUP="true"
             ;;
         --help)
             echo -e $HELP_TEXT
@@ -89,7 +96,7 @@ if [ "$CLOSE_DIR" == "true" ]; then
     orig_filename=`cat "./$PROPERTIES_FILE" | grep filename | cut -d'=' -f2-`
     zipped_dirname=`pwd | xargs basename`
     echo "Found zip properties at $zipped_dirname"
-    if [ -f "../$orig_filename" ]; then
+    if [ -f "../$orig_filename" ] && [ "${SKIP_BACKUP}" == "false" ]; then
         mv "../$orig_filename" "../backup.$orig_filename"
     fi
 
