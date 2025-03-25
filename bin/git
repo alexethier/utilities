@@ -4,7 +4,7 @@
 if [[ "$1" == "save" ]]; then
     set -e
     current_branch=`git branch --show-current`
-    latest_saved_version=`git branch | grep "aetmp" | cut -d'p' -f2 | sort -Vr | head -n 1`
+    latest_saved_version=`git branch | grep -E "aetmp[0-9]+" | cut -d'p' -f2 | sort -Vr | head -n 1`
     new_branch_name="aetmp$((latest_saved_version + 1))"
     git checkout -b $new_branch_name
     echo "Created new backup branch: $new_branch_name"
