@@ -27,3 +27,8 @@ Access-Control-Allow-Origin: *
 done
 
 socat -v tcp4-listen:8443,reuseaddr,fork ssl:datavolo-auth-dev.auth.us-east-1.amazoncognito.com:443,verify=0
+
+# Netcat listen on port and write to file
+  nc -k -l 0.0.0.0 10000 | tee out.txt
+# Connect to port 
+  nc localhost 10000
