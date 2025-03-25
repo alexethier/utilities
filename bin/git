@@ -1,21 +1,61 @@
 #!/bin/bash
 # set -x
 
-if [[ "$1" == "save" ]]; then
-    set -e
-    current_branch=`git branch --show-current`
-    latest_saved_version=`git branch | grep -E "aetmp[0-9]+" | cut -d'p' -f2 | sort -Vr | head -n 1`
-    new_branch_name="aetmp$((latest_saved_version + 1))"
-    git checkout -b $new_branch_name
-    echo "Created new backup branch: $new_branch_name"
-    git checkout $current_branch
-    exit 0
+GIT_PATH=""
+
+if [ -f "/opt/homebrew/bin/git" ]; then
+  GIT_PATH="/opt/homebrew/bin/git"
+elif [ -f "/usr/bin/git" ]; then
+  GIT_PATH="/usr/bin/git"
+fi
+if [ -z "$GIT_PATH" ]; then
+  echo "Could not find git installation location."
+  exit 1
 fi
 
-# JGit will break if the user
-# sets their gpg format to ssh
-# because it doesn't support it
-# which breaks nifi compilation
-# to circumvent this, set the gpg format
-# everytime the cli is invoked.
-/usr/bin/git -c gpg.format=ssh "$@"
+save() {
+  current_branch=`git branch --show-current`
+  TARGET_BRANCH="$current_branch"
+  if [ ! -z "$1" ]; then
+    TARGET_BRANCH="$1"
+  fi
+
+  if [ "$TARGET_BRANCH" != "$current_branch" ]; then
+    $GIT_PATH checkout $TARGET_BRANCH
+  fi
+
+  latest_saved_version=`git branch | grep -E "aetmp[0-9]+" | cut -d'p' -f2 | sort -Vr | head -n 1`
+  new_branch_name="aetmp$((latest_saved_version + 1))"
+  $GIT_PATH checkout -b $new_branch_name
+  $GIT_PATH checkout $current_branch
+}
+
+delete() {
+  TARGET_BRANCH="$1"
+  save $TARGET_BRANCH
+  $GIT_PATH branch -d $TARGET_BRANCH
+}
+
+if [[ "$1" == "save" ]]; then
+  set -e
+  save 
+  set +e
+elif [[ "$1" == "delete" ]]; then
+  set -e
+  TARGET_BRANCH="$2"
+  if [ -z "$2" ]; then
+    echo "No target branch specified"
+  fi
+
+  delete $TARGET_BRANCH
+  set +e
+else
+  # JGit will break if the user
+  # sets their gpg format to ssh
+  # because it doesn't support it
+  # which breaks nifi compilation
+  # to circumvent this, set the gpg format
+  # everytime the cli is invoked.
+  $GIT_PATH -c gpg.format=ssh "$@"
+fi
+
