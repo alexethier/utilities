@@ -33,7 +33,7 @@ save() {
 delete() {
   TARGET_BRANCH="$1"
   save $TARGET_BRANCH
-  $GIT_PATH branch -d $TARGET_BRANCH
+  $GIT_PATH branch -D $TARGET_BRANCH
 }
 
 if [[ "$1" == "save" ]]; then
