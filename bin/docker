@@ -1,0 +1,25 @@
+#!/bin/bash
+# set -x
+
+DOCKER_PATH=""
+
+if [ -f "/usr/local/bin/docker" ]; then
+  DOCKER_PATH="/usr/local/bin/docker"
+fi
+if [ -z "$DOCKER_PATH" ]; then
+  echo "Could not find docker installation location."
+  exit 1
+fi
+
+clean() {
+  $DOCKER_PATH images  | tr -s ' '  | grep "<none> <none>" | cut -d' ' -f3  | xargs -I {} $DOCKER_PATH rmi {} 
+}
+
+if [[ "$1" == "clean" ]]; then
+  set -e
+  clean 
+  set +e
+else
+  $DOCKER_PATH "$@"
+fi
+
