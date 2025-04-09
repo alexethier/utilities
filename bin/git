@@ -36,6 +36,11 @@ delete() {
   $GIT_PATH branch -D $TARGET_BRANCH
 }
 
+rebase_self() {
+  save
+  $GIT_PATH rebase -i HEAD~10
+}
+
 if [[ "$1" == "save" ]]; then
   set -e
   save 
@@ -48,6 +53,11 @@ elif [[ "$1" == "delete" ]]; then
   fi
 
   delete $TARGET_BRANCH
+  set +e
+# Do not override the actual rebase command, do not override if there is a second argument to the rebase command
+elif [[ -z "$2" && "$1" == "rebase" ]]; then
+  set -e
+  rebase_self
   set +e
 else
   # JGit will break if the user
