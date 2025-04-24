@@ -32,6 +32,10 @@ save() {
 
 delete() {
   TARGET_BRANCH="$1"
+  if [ -z "$TARGET_BRANCH" ]; then
+     TARGET_BRANCH=`$GIT_PATH branch --show-current`
+     $GIT_PATH checkout main
+  fi
   save $TARGET_BRANCH
   $GIT_PATH branch -D $TARGET_BRANCH
 }
