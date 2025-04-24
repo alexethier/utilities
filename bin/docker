@@ -15,10 +15,69 @@ clean() {
   $DOCKER_PATH images  | tr -s ' '  | grep "<none> <none>" | cut -d' ' -f3  | xargs -I {} $DOCKER_PATH rmi {} 
 }
 
-if [[ "$1" == "clean" ]]; then
+clean_all() {
+
+tmpfile=$(mktemp)
+tmpout=$(mktemp)
+$DOCKER_PATH images --format '{{.Repository}} {{.Tag}}' > "$tmpfile"
+
+TMPFILE="$tmpfile" TMPOUT="$tmpout" python3 - <<EOF
+import sys
+from collections import defaultdict
+import os
+
+tmpfile = os.environ['TMPFILE']
+tmpout = os.environ['TMPOUT']
+
+def parse_version(v):
+  return tuple(int(x) for x in v.strip().split('.'))
+
+data = defaultdict(list)
+
+with open(tmpfile) as f:
+  for line in f:
+    try:
+      repo, tag = line.strip().split()
+      if not all(part.isdigit() for part in tag.split('.')):
+        continue
+      data[repo].append(tag)
+    except:
+      continue
+
+with open("$tmpout", "w") as f:
+  for repo, versions in data.items():
+    sorted_versions = sorted(versions, key=parse_version)
+    latest = sorted_versions[-1]
+    outdated = [v for v in sorted_versions if v != latest]
+    if len(outdated) > 0:
+      print()
+      print(f"{repo}")
+      print(f"Latest: {latest}")
+      for outdate in outdated:
+        print(f"  {outdate}")
+        f.write(f"{repo}:{outdate}\n")
+EOF
+echo ""
+echo "Will Delete"
+cat $tmpout | xargs -n 1
+echo ""
+echo ""
+cat $tmpout | xargs -n 1 | xargs -I {} $DOCKER_PATH rmi {}
+
+}
+
+if [[ "$1" == "clean" && "$2" == "all" ]]; then
   set -e
   clean 
+  clean_all
   set +e
+elif [[ "$1" == "clean" ]]; then
+  set -e
+  clean
+  set +e
+elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  echo "docker clean # Cleans all 'none' tags"
+  echo "docker clean all # Cleans all 'none' tags and old versions"
 else
   $DOCKER_PATH "$@"
 fi
