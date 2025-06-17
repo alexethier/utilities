@@ -3,10 +3,8 @@
 import os
 import argparse
 
-LOCK_SUFFIX = ".locker"
+LOCK_SUFFIX = ".lock"
 SAVE_SUFFIX = ".bytes"
-SCRAM_SUFFIX = ".scram"
-SCRAM_LETTERS = "abcdefghijklmnopqrstuvwxyz"
 SAVE_LENGTH = 1000
 HEX_PATTERN = "0000FFFF0000FFFF"
 class FileLocker:
@@ -35,77 +33,6 @@ class FileLocker:
                 print(f"Saving file to {save_path}")
                 f_out.write(file_bytes)
 
-    def get_scamble_indicies(self, index, length):
-        return (index + ((index+7) % 13)) % length, (index + ((index+53) % 11)) % length
- 
-    def scramble_name(self, path):
-        filename = os.path.basename(path)
-        index = filename.rfind('.')
-        if index == -1 or filename.startswith("."):
-            print("Skipping scrambling {filename}")
-            return
-        name = filename[0:index]
-        filetype = filename[index:]
-
-        padded_name = name + SCRAM_LETTERS
-        name_chars = list(padded_name)
-        for i in range(0,200):
-            first, second = self.get_scamble_indicies(i, len(name_chars))
-            name_chars[first], name_chars[second] = name_chars[second], name_chars[first]
-        scramble_name = ''.join(name_chars)
-
-        full_scramble_name = scramble_name + filetype + SCRAM_SUFFIX
-        unscramble_name = self.get_unscramble_name(full_scramble_name)
-        if filename != unscramble_name:
-            raise Exception(f"Scramble failed unscramble validation: {filename} != {unscramble_name}")
-        dirname = os.path.dirname(path)
-        scramble_path = dirname + os.path.sep + full_scramble_name
-
-        os.rename(path, scramble_path)
-
-    def get_unscramble_raw(self, filename):
-        name_chars = list(filename)
-        for j in range(0,200):
-            i = 200 - j - 1
-            first, second = self.get_scamble_indicies(i, len(name_chars))
-            name_chars[first], name_chars[second] = name_chars[second], name_chars[first]
-        name = ''.join(name_chars)
-        return name[0:-len(SCRAM_LETTERS)]
-    
-
-    def get_unscramble_name(self, filename):
-        index = filename.rfind('.')
-        filetype = filename[index:]
-
-        if filetype == SCRAM_SUFFIX:
-            print(f"Unscrambling filename {filename}")
-            name = filename[:-len(SCRAM_SUFFIX)]
-            index2 = name.rfind('.')
-            filetype2 = name[index2:]
-            name2 = name[0:index2]
-            return self.get_unscramble_raw(name2) + filetype2
-        else:
-            filename2 = filename[0:index]
-            index2 = filename2.rfind('.')
-            filetype2 = filename2[index2:]
-            if filetype2 == SCRAM_SUFFIX:
-                print(f"Unscrambling filename {filename}")
-                filename3 = filename2[0:-len(SCRAM_SUFFIX)]
-                index3 = filename3.rfind('.')
-                name = filename3[0:index3]
-                filetype3 = filename3[index3:]
-                return self.get_unscramble_raw(name) + filetype3
-
-    def unscramble_name(self, path):
-        scrambled_filename = os.path.basename(path)
-        unscrambled_filename = self.get_unscramble_name(scrambled_filename)
-
-        if unscrambled_filename is None:
-            print(f"Skipping unscramble {path}")
-        else:
-            unscrambled_path = os.path.dirname(path) + os.sep + unscrambled_filename
-            os.rename(path, unscrambled_path)
-         
     def apply_lock(self, path, lock_bytes):
         with open(path, 'r+b') as f_out:
             f_out.write(lock_bytes)
@@ -136,31 +63,6 @@ class FileLocker:
 
         with open(path, 'r+b') as f_out:
             f_out.write(restore_bytes)
-
-    def scramble_directory(self, dir_path):
-        print(f"Scrambling directory {dir_path}")
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-            if os.path.isfile(item_path):
-                print(f"Scrambling filename {item_path}")
-                self.scramble_name(item_path)
-
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-            if os.path.isdir(item_path):
-                self.scramble_directory(item_path)
-
-    def unscramble_directory(self, dir_path):
-        print(f"Unscrambling directory {dir_path}")
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-            if os.path.isfile(item_path):
-                self.unscramble_name(item_path)
-
-        for item in os.listdir(dir_path):
-            item_path = os.path.join(dir_path, item)
-            if os.path.isdir(item_path):
-                self.unscramble_directory(item_path)
 
     def lock_directory(self, dir_path):
         print(f"Locking directory {dir_path}")
@@ -215,13 +117,10 @@ class FileLocker:
             raise Exception("One of lock, unlock, or restore must be set.")
 
         if args["lock"]:
-            self.scramble_directory(os.getcwd())
             self.lock_directory(os.getcwd())
         if args["unlock"]:
-            self.unscramble_directory(os.getcwd())
             self.unlock_directory(os.getcwd())
         if args["restore"]:
-            self.unscramble_directory(os.getcwd())
             self.restore_directory(os.getcwd())
 
 file_locker = FileLocker()
