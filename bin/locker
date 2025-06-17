@@ -12,8 +12,16 @@ class DirectoryManager:
     DATA_DIR = os.path.expanduser("~/.aedev")
     DATA_FILE = os.path.join(DATA_DIR, "locker.data")
     
-    def __init__(self):
-        self.directories = []
+    def __init__(self, from_file=False, directories=None):
+        if from_file:
+            self.directories = self.load_from_file()
+            if not self.directories:
+                raise ValueError("No saved directories found in file")
+        elif directories:
+            self.directories = []
+            self.add_directories(directories)
+        else:
+            self.directories = []
     
     def validate_directory(self, dir_path):
         abs_path = os.path.abspath(dir_path)
@@ -93,6 +101,10 @@ class FileLocker:
         os.rename(path, unlock_path)
 
     def lock_file(self, path):
+        file_size = os.path.getsize(path)
+        if file_size < SAVE_LENGTH:
+            print(f"WARNING: Skipping {path} - file size ({file_size} bytes) is less than SAVE_LENGTH ({SAVE_LENGTH} bytes)")
+            return
         self.save_bytes(path)
         lock_bytes = self.generate_byte_sequence(path)
         self.apply_lock(path, lock_bytes)
@@ -157,6 +169,7 @@ class FileLocker:
         parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock files')
         parser.add_argument('-r', '--restore', action='store_true', default=False, help='restore files')
         parser.add_argument('-d', '--directories', nargs='+', help='directories to process (default: current directory)')
+        parser.add_argument('-f', '--from-file', action='store_true', default=False, help='load directories from saved file (~/.aedev/locker.data)')
         args = vars(parser.parse_args())
         
         if args["lock"] and args["unlock"]:
@@ -164,10 +177,11 @@ class FileLocker:
         if not (args["lock"] or args["unlock"] or args["restore"]):
             raise Exception("One of lock, unlock, or restore must be set.")
 
-        directories = args["directories"] if args["directories"] else [os.getcwd()]
-        
-        dir_manager = DirectoryManager()
-        dir_manager.add_directories(directories)
+        if args["from_file"]:
+            dir_manager = DirectoryManager(from_file=True)
+        else:
+            directories = args["directories"] if args["directories"] else [os.getcwd()]
+            dir_manager = DirectoryManager(directories=directories)
 
         for directory in dir_manager.get_directories():
             if args["lock"]:
