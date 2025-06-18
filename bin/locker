@@ -64,24 +64,19 @@ class DirectoryManager:
 
 class NameLocker:
     def __init__(self):
-        pass
+        self.alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     
-    def rotate_name(self, name):
-        result = []
-        for char in name:
-            if 'a' <= char <= 'z':
-                result.append(chr((ord(char) - ord('a') + 15) % 26 + ord('a')))
-            elif 'A' <= char <= 'Z':
-                result.append(chr((ord(char) - ord('A') + 15) % 26 + ord('A')))
-            else:
-                result.append(char)
-        return ''.join(result)
+    def rotate_name_forward(self, name):
+        return ''.join(self.alphabet[(self.alphabet.index(c) + 15) % len(self.alphabet)] if c in self.alphabet else c for c in name)
+    
+    def rotate_name_backward(self, name):
+        return ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in name)
     
     def lock_file_name(self, path):
         dir_path = os.path.dirname(path)
         filename = os.path.basename(path)
         
-        locked_name = self.rotate_name(filename)
+        locked_name = self.rotate_name_forward(filename)
         locked_path = os.path.join(dir_path, locked_name)
         
         os.rename(path, locked_path)
@@ -91,8 +86,7 @@ class NameLocker:
         dir_path = os.path.dirname(path)
         filename = os.path.basename(path)
         
-        # ROT15 is self-inverse, so same operation unlocks
-        unlocked_name = self.rotate_name(filename)
+        unlocked_name = self.rotate_name_backward(filename)
         unlocked_path = os.path.join(dir_path, unlocked_name)
         
         os.rename(path, unlocked_path)
