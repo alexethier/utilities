@@ -63,6 +63,8 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("-a","--add", help="Adds a new column with default value.", nargs=2, action='append')
   parser.add_argument("-d","--delete", help="Deletes a column with default value.", action='append')
+  parser.add_argument("-u","--update", help="Column name to update.", type=str)
+  parser.add_argument("-n","--new-value", help="New value for update mode (required with -u).", type=str)
   parser.add_argument("-p","--print", help="Print input headers to stderr.", action="store_true")
 
   add_args = []
@@ -72,10 +74,17 @@ def main():
     add_args.extend(args["add"])
   if args["delete"]:
     delete_column_names.extend(args["delete"])
+  
+  # Validate update mode
+  if args["update"] and not args["new_value"]:
+    parser.error("-n/--new-value is required when -u/--update is specified")
+  if args["new_value"] and not args["update"]:
+    parser.error("-u/--update must be specified when using -n/--new-value")
 
   first = True
   headers = []
   delete_indicies = []
+  update_column_index = None
 
   for raw_line in sys.stdin:
     line = raw_line.rstrip('\n')
@@ -88,12 +97,26 @@ def main():
       if args["print"]:
         sys.stderr.write(", ".join(headers) + os.linesep)
 
+      # Find update column index if in update mode
+      if args["update"]:
+        update_column_index = None
+        for i, header in enumerate(headers):
+          if header == args["update"]:
+            update_column_index = i
+            break
+        if update_column_index is None:
+          raise Exception(f"No header for update column: {args['update']}" + os.linesep)
+
       print(",".join(output_headers))
 
     elif add_args or delete_column_names: 
       output_vals = process_row(line, add_args, delete_indicies)
       print(",".join(output_vals))
+    elif args["update"]:
+      vals = parse_csv_line(line)
+      vals[update_column_index] = args["new_value"]
+      print(",".join(vals))
     else:
-      break
+      print(line)
 
 main()
