@@ -62,6 +62,114 @@ class DirectoryManager:
                 return [line.strip() for line in f.readlines() if line.strip()]
         return []
 
+class NameLocker:
+    def __init__(self):
+        pass
+    
+    def rotate_name(self, name):
+        result = []
+        for char in name:
+            if 'a' <= char <= 'z':
+                result.append(chr((ord(char) - ord('a') + 15) % 26 + ord('a')))
+            elif 'A' <= char <= 'Z':
+                result.append(chr((ord(char) - ord('A') + 15) % 26 + ord('A')))
+            else:
+                result.append(char)
+        return ''.join(result)
+    
+    def lock_file_name(self, path):
+        dir_path = os.path.dirname(path)
+        filename = os.path.basename(path)
+        
+        locked_name = self.rotate_name(filename)
+        locked_path = os.path.join(dir_path, locked_name)
+        
+        os.rename(path, locked_path)
+        print(f"Locked name: {filename} -> {locked_name}")
+    
+    def unlock_file_name(self, path):
+        dir_path = os.path.dirname(path)
+        filename = os.path.basename(path)
+        
+        # ROT15 is self-inverse, so same operation unlocks
+        unlocked_name = self.rotate_name(filename)
+        unlocked_path = os.path.join(dir_path, unlocked_name)
+        
+        os.rename(path, unlocked_path)
+        print(f"Unlocked name: {filename} -> {unlocked_name}")
+    
+    def lock_directory(self, dir_path):
+        print(f"Locking names in directory {dir_path}")
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isfile(item_path):
+                self.lock_file_name(item_path)
+        
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isdir(item_path):
+                self.lock_directory(item_path)
+    
+    def unlock_directory(self, dir_path):
+        print(f"Unlocking names in directory {dir_path}")
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isfile(item_path):
+                self.unlock_file_name(item_path)
+        
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isdir(item_path):
+                self.unlock_directory(item_path)
+
+class Runner:
+    def __init__(self):
+        self.file_locker = FileLocker()
+        self.name_locker = NameLocker()
+    
+    def main(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-l', '--lock', action='store_true', default=False, help='lock files')
+        parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock files')
+        parser.add_argument('-r', '--restore', action='store_true', default=False, help='restore files')
+        parser.add_argument('-d', '--directories', nargs='+', help='directories to process (default: current directory)')
+        parser.add_argument('-f', '--from-file', action='store_true', default=False, help='load directories from saved file (~/.aedev/locker.data)')
+        parser.add_argument('--files-only', action='store_true', default=False, help='only run FileLocker operations')
+        parser.add_argument('--names-only', action='store_true', default=False, help='only run NameLocker operations')
+        args = vars(parser.parse_args())
+        
+        if args["lock"] and args["unlock"]:
+            raise Exception("Lock and unlock cannot both be set.")
+        if not (args["lock"] or args["unlock"] or args["restore"]):
+            raise Exception("One of lock, unlock, or restore must be set.")
+        if args["files_only"] and args["names_only"]:
+            raise Exception("Cannot specify both --files-only and --names-only.")
+
+        if args["from_file"]:
+            dir_manager = DirectoryManager(from_file=True)
+        else:
+            directories = args["directories"] if args["directories"] else [os.getcwd()]
+            dir_manager = DirectoryManager(directories=directories)
+
+        # Determine which operations to run
+        run_names = not args["files_only"]
+        run_files = not args["names_only"]
+
+        for directory in dir_manager.get_directories():
+            if args["lock"]:
+                if run_names:
+                    self.name_locker.lock_directory(directory)
+                if run_files:
+                    self.file_locker.lock_directory(directory)
+            if args["unlock"]:
+                if run_files:
+                    self.file_locker.unlock_directory(directory)
+                if run_names:
+                    self.name_locker.unlock_directory(directory)
+            if args["restore"]:
+                if run_files:
+                    self.file_locker.restore_directory(directory)
+
 class FileLocker:
     def __init__(self):
         pass
@@ -163,33 +271,6 @@ class FileLocker:
             if os.path.isdir(item_path):
                 self.restore_directory(item_path)
 
-    def main(self):
-        parser = argparse.ArgumentParser()
-        parser.add_argument('-l', '--lock', action='store_true', default=False, help='lock files')
-        parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock files')
-        parser.add_argument('-r', '--restore', action='store_true', default=False, help='restore files')
-        parser.add_argument('-d', '--directories', nargs='+', help='directories to process (default: current directory)')
-        parser.add_argument('-f', '--from-file', action='store_true', default=False, help='load directories from saved file (~/.aedev/locker.data)')
-        args = vars(parser.parse_args())
-        
-        if args["lock"] and args["unlock"]:
-            raise Exception("Lock and unlock cannot both be set.")
-        if not (args["lock"] or args["unlock"] or args["restore"]):
-            raise Exception("One of lock, unlock, or restore must be set.")
-
-        if args["from_file"]:
-            dir_manager = DirectoryManager(from_file=True)
-        else:
-            directories = args["directories"] if args["directories"] else [os.getcwd()]
-            dir_manager = DirectoryManager(directories=directories)
-
-        for directory in dir_manager.get_directories():
-            if args["lock"]:
-                self.lock_directory(directory)
-            if args["unlock"]:
-                self.unlock_directory(directory)
-            if args["restore"]:
-                self.restore_directory(directory)
-
-file_locker = FileLocker()
-file_locker.main()
+if __name__ == "__main__":
+    runner = Runner()
+    runner.main()
