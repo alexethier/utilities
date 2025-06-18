@@ -67,10 +67,28 @@ class NameLocker:
         self.alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     
     def rotate_name_forward(self, name):
-        return ''.join(self.alphabet[(self.alphabet.index(c) + 15) % len(self.alphabet)] if c in self.alphabet else c for c in name)
+        if name.endswith(LOCK_SUFFIX):
+            base_name = name[:-1*len(LOCK_SUFFIX)]
+            rotated = ''.join(self.alphabet[(self.alphabet.index(c) + 15) % len(self.alphabet)] if c in self.alphabet else c for c in base_name)
+            return rotated + LOCK_SUFFIX
+        elif name.endswith(SAVE_SUFFIX):
+            base_name = name[:-1*len(SAVE_SUFFIX)]
+            rotated = ''.join(self.alphabet[(self.alphabet.index(c) + 15) % len(self.alphabet)] if c in self.alphabet else c for c in base_name)
+            return rotated + SAVE_SUFFIX
+        else:
+            return ''.join(self.alphabet[(self.alphabet.index(c) + 15) % len(self.alphabet)] if c in self.alphabet else c for c in name)
     
     def rotate_name_backward(self, name):
-        return ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in name)
+        if name.endswith(LOCK_SUFFIX):
+            base_name = name[:-1*len(LOCK_SUFFIX)]
+            rotated = ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in base_name)
+            return rotated + LOCK_SUFFIX
+        elif name.endswith('.bytes'):
+            base_name = name[:-1*len(SAVE_SUFFIX)]
+            rotated = ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in base_name)
+            return rotated + '.bytes'
+        else:
+            return ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in name)
     
     def lock_file_name(self, path):
         dir_path = os.path.dirname(path)
@@ -149,20 +167,26 @@ class Runner:
         run_names = not args["files_only"]
         run_files = not args["names_only"]
 
-        for directory in dir_manager.get_directories():
-            if args["lock"]:
-                if run_names:
+        if run_files:
+            self.file_locker.lock_directory(directory)
+            for directory in dir_manager.get_directories():
+                if args["lock"]:
+                        self.name_locker.lock_directory(directory)
+                if args["unlock"]:
+                    if run_files:
+                        self.file_locker.unlock_directory(directory)
+                    if run_names:
+                        self.name_locker.unlock_directory(directory)
+                if args["restore"]:
+                    if run_files:
+                        self.file_locker.restore_directory(directory)
+
+        if run_names:
+            for directory in dir_manager.get_directories():
+                if args["lock"]:
                     self.name_locker.lock_directory(directory)
-                if run_files:
-                    self.file_locker.lock_directory(directory)
-            if args["unlock"]:
-                if run_files:
-                    self.file_locker.unlock_directory(directory)
-                if run_names:
+                if args["unlock"]:
                     self.name_locker.unlock_directory(directory)
-            if args["restore"]:
-                if run_files:
-                    self.file_locker.restore_directory(directory)
 
 class FileLocker:
     def __init__(self):
