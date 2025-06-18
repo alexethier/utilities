@@ -45,7 +45,26 @@ rebase_self() {
   $GIT_PATH rebase -i HEAD~10
 }
 
-if [[ "$1" == "save" ]]; then
+pull_branch() {
+  TARGET_BRANCH="$1"
+  current_branch=`git branch --show-current`
+  $GIT_PATH checkout $TARGET_BRANCH
+  $GIT_PATH pull
+  $GIT_PATH checkout $current_branch
+}
+
+print_branch_owners() {
+  $GIT_PATH for-each-ref --format='%(refname:short) %(authorname)' refs/remotes/
+}
+
+if false; then
+  echo "pass"
+elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  echo "Git wrapper is being used and overriding the git help command."
+  echo "Run '$GIT_PATH -h' to show git help"
+  echo ""
+  echo "Options: save, delete, rebase, rebasem (rebases main)"
+elif [[ "$1" == "save" ]]; then
   set -e
   save 
   set +e
@@ -63,6 +82,19 @@ elif [[ -z "$2" && "$1" == "rebase" ]]; then
   set -e
   rebase_self
   set +e
+elif [[ "$1" == "rebasem" ]]; then
+  target_branch="main"
+  if [[ -n "$2" ]]; then
+    target_branch="$2"
+  fi
+  set -e
+  pull_branch $target_branch
+  save
+  $GIT_PATH rebase $target_branch
+  set +e
+elif [[ "$1" == "owner" || "$1" == "owners" ]]; then
+  $GIT_PATH remote prune origin
+  print_branch_owners
 else
   # JGit will break if the user
   # sets their gpg format to ssh
