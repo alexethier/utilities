@@ -5,6 +5,7 @@ import argparse
 
 LOCK_SUFFIX = ".lock"
 SAVE_SUFFIX = ".bytes"
+ROT_SUFFIX = ".rot"
 SAVE_LENGTH = 1000
 HEX_PATTERN = "0000FFFF0000FFFF"
 
@@ -83,10 +84,10 @@ class NameLocker:
             base_name = name[:-1*len(LOCK_SUFFIX)]
             rotated = ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in base_name)
             return rotated + LOCK_SUFFIX
-        elif name.endswith('.bytes'):
+        elif name.endswith(SAVE_SUFFIX):
             base_name = name[:-1*len(SAVE_SUFFIX)]
             rotated = ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in base_name)
-            return rotated + '.bytes'
+            return rotated + SAVE_SUFFIX
         else:
             return ''.join(self.alphabet[(self.alphabet.index(c) - 15) % len(self.alphabet)] if c in self.alphabet else c for c in name)
     
@@ -94,7 +95,10 @@ class NameLocker:
         dir_path = os.path.dirname(path)
         filename = os.path.basename(path)
         
-        locked_name = self.rotate_name_forward(filename)
+        if filename.endswith(ROT_SUFFIX):
+            return
+        
+        locked_name = self.rotate_name_forward(filename) + ROT_SUFFIX
         locked_path = os.path.join(dir_path, locked_name)
         
         os.rename(path, locked_path)
@@ -104,7 +108,11 @@ class NameLocker:
         dir_path = os.path.dirname(path)
         filename = os.path.basename(path)
         
-        unlocked_name = self.rotate_name_backward(filename)
+        if not filename.endswith(ROT_SUFFIX):
+            return
+        
+        filename_without_rot = filename[:-len(ROT_SUFFIX)]
+        unlocked_name = self.rotate_name_backward(filename_without_rot)
         unlocked_path = os.path.join(dir_path, unlocked_name)
         
         os.rename(path, unlocked_path)
@@ -145,9 +153,9 @@ class Runner:
         parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock files')
         parser.add_argument('-r', '--restore', action='store_true', default=False, help='restore files')
         parser.add_argument('-d', '--directories', nargs='+', help='directories to process (default: current directory)')
-        parser.add_argument('-f', '--from-file', action='store_true', default=False, help='load directories from saved file (~/.aedev/locker.data)')
-        parser.add_argument('--files-only', action='store_true', default=False, help='only run FileLocker operations')
-        parser.add_argument('--names-only', action='store_true', default=False, help='only run NameLocker operations')
+        parser.add_argument('-q', '--from-file', action='store_true', default=False, help='load directories from saved file (~/.aedev/locker.data)')
+        parser.add_argument('-f', '--files-only', action='store_true', default=False, help='only run FileLocker operations')
+        parser.add_argument('-n', '--names-only', action='store_true', default=False, help='only run NameLocker operations')
         args = vars(parser.parse_args())
         
         if args["lock"] and args["unlock"]:
@@ -168,18 +176,13 @@ class Runner:
         run_files = not args["names_only"]
 
         if run_files:
-            self.file_locker.lock_directory(directory)
             for directory in dir_manager.get_directories():
                 if args["lock"]:
-                        self.name_locker.lock_directory(directory)
+                    self.file_locker.lock_directory(directory)
                 if args["unlock"]:
-                    if run_files:
-                        self.file_locker.unlock_directory(directory)
-                    if run_names:
-                        self.name_locker.unlock_directory(directory)
+                    self.file_locker.unlock_directory(directory)
                 if args["restore"]:
-                    if run_files:
-                        self.file_locker.restore_directory(directory)
+                    self.file_locker.restore_directory(directory)
 
         if run_names:
             for directory in dir_manager.get_directories():
