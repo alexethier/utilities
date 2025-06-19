@@ -117,6 +117,21 @@ class NameLocker:
         
         os.rename(path, unlocked_path)
         print(f"Unlocked name: {filename} -> {unlocked_name}")
+
+    def toggle_directory(self, dir_path):
+        print(f"Toggle names in directory {dir_path}")
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isfile(item_path):
+                if self.is_locked_file(item_path):
+                    self.unlock_file_name(item_path)
+                else:
+                    self.lock_file_name(item_path)
+
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isdir(item_path):
+                self.unlock_directory(item_path)
     
     def lock_directory(self, dir_path):
         print(f"Locking names in directory {dir_path}")
@@ -142,6 +157,11 @@ class NameLocker:
             if os.path.isdir(item_path):
                 self.unlock_directory(item_path)
 
+    def is_locked_file(self, filepath):
+        if filepath.endswith("bytes") or filepath.endswith("bytes.rot") or filepath.endswith("lock") or filepath.endswith("lock.rot"):
+            return True
+        return False
+
 class Runner:
     def __init__(self):
         self.file_locker = FileLocker()
@@ -153,18 +173,14 @@ class Runner:
         parser.add_argument('-u', '--unlock', action='store_true', default=False, help='unlock files')
         parser.add_argument('-r', '--restore', action='store_true', default=False, help='restore files')
         parser.add_argument('-d', '--directories', nargs='+', help='directories to process (default: current directory)')
-        parser.add_argument('-q', '--from-file', action='store_true', default=False, help='load directories from saved file (~/.aedev/locker.data)')
+        parser.add_argument('-q', '--from-file', action='store_true', default=True, help='load directories from saved file (~/.aedev/locker.data)')
         parser.add_argument('-f', '--files-only', action='store_true', default=False, help='only run FileLocker operations')
         parser.add_argument('-n', '--names-only', action='store_true', default=False, help='only run NameLocker operations')
+        parser.add_argument('-t', '--toggle', action='store_true', default=True, help='Toggle lock vs unlock per file')
         args = vars(parser.parse_args())
         
-        if args["lock"] and args["unlock"]:
-            raise Exception("Lock and unlock cannot both be set.")
-        if not (args["lock"] or args["unlock"] or args["restore"]):
-            raise Exception("One of lock, unlock, or restore must be set.")
         if args["files_only"] and args["names_only"]:
             raise Exception("Cannot specify both --files-only and --names-only.")
-
         if args["from_file"]:
             dir_manager = DirectoryManager(from_file=True)
         else:
@@ -175,6 +191,13 @@ class Runner:
         run_names = not args["files_only"]
         run_files = not args["names_only"]
 
+        if run_names:
+            for directory in dir_manager.get_directories():
+                if args["unlock"]:
+                    self.name_locker.unlock_directory(directory)
+                if args["toggle"]:
+                    self.name_locker.toggle_directory(directory)
+
         if run_files:
             for directory in dir_manager.get_directories():
                 if args["lock"]:
@@ -183,13 +206,15 @@ class Runner:
                     self.file_locker.unlock_directory(directory)
                 if args["restore"]:
                     self.file_locker.restore_directory(directory)
+                if args["toggle"]:
+                    self.name_locker.toggle_directory(directory)
 
         if run_names:
             for directory in dir_manager.get_directories():
                 if args["lock"]:
                     self.name_locker.lock_directory(directory)
-                if args["unlock"]:
-                    self.name_locker.unlock_directory(directory)
+                if args["toggle"]:
+                    self.name_locker.toggle_directory(directory)
 
 class FileLocker:
     def __init__(self):
@@ -230,10 +255,6 @@ class FileLocker:
         os.rename(path, unlock_path)
 
     def lock_file(self, path):
-        file_size = os.path.getsize(path)
-        if file_size < SAVE_LENGTH:
-            print(f"WARNING: Skipping {path} - file size ({file_size} bytes) is less than SAVE_LENGTH ({SAVE_LENGTH} bytes)")
-            return
         self.save_bytes(path)
         lock_bytes = self.generate_byte_sequence(path)
         self.apply_lock(path, lock_bytes)
@@ -252,11 +273,38 @@ class FileLocker:
         with open(path, 'r+b') as f_out:
             f_out.write(restore_bytes)
 
+    def toggle_directory(self, dir_path):
+        print(f"Toggle lock directory {dir_path}")
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isfile(item_path):
+                if self.is_locked_file(item_path):
+                    file_size = os.path.getsize(item_path)
+                    if file_size < SAVE_LENGTH:
+                        print(f"WARNING: Skipping {item_path} - file size ({file_size} bytes) is less than ({SAVE_LENGTH} bytes)")
+                        continue
+
+                    print(f"Locking file {item_path}")
+                    self.lock_file(item_path)
+                elif item_path.endswith("lock") or item_path.endswith("lock.rot"):
+                    print(f"Unocking file {item_path}")
+                    self.unlock_file(item_path)
+
+        for item in os.listdir(dir_path):
+            item_path = os.path.join(dir_path, item)
+            if os.path.isdir(item_path):
+                self.toggle_directory(item_path)
+
     def lock_directory(self, dir_path):
         print(f"Locking directory {dir_path}")
         for item in os.listdir(dir_path):
             item_path = os.path.join(dir_path, item)
-            if os.path.isfile(item_path) and not (item_path.endswith("bytes") or item_path.endswith("lock")):
+            if os.path.isfile(item_path) and not self.is_locked_file(item_path):
+                file_size = os.path.getsize(item_path)
+                if file_size < SAVE_LENGTH:
+                    print(f"WARNING: Skipping {item_path} - file size ({file_size} bytes) is less than ({SAVE_LENGTH} bytes)")
+                    continue
+
                 print(f"Locking file {item_path}")
                 self.lock_file(item_path)
 
@@ -269,7 +317,7 @@ class FileLocker:
         print(f"Unlocking directory {dir_path}")
         for item in os.listdir(dir_path):
             item_path = os.path.join(dir_path, item)
-            if os.path.isfile(item_path) and item_path.endswith("lock"):
+            if os.path.isfile(item_path) and (item_path.endswith("lock") or item_path.endswith("lock.rot")):
                 print(f"Unocking file {item_path}")
                 self.unlock_file(item_path)
 
@@ -277,6 +325,11 @@ class FileLocker:
             item_path = os.path.join(dir_path, item)
             if os.path.isdir(item_path):
                 self.unlock_directory(item_path)
+
+    def is_locked_file(self, filepath):
+        if filepath.endswith("bytes") or filepath.endswith("bytes.rot") or filepath.endswith("lock") or filepath.endswith("lock.rot"):
+            return True
+        return False
 
     def restore_directory(self, dir_path):
         print(f"Restoring directory {dir_path}")
