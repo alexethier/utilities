@@ -62,7 +62,8 @@ def main():
 
   parser = argparse.ArgumentParser()
   parser.add_argument("-a","--add", help="Adds a new column with default value.", nargs=2, action='append')
-  parser.add_argument("-d","--delete", help="Deletes a column with default value.", action='append')
+  # parser.add_argument("-q","--query", help="Only prints selected column values.", nargs=2, action='append') # Not implemented yet.
+  parser.add_argument("-d","--delete", help="Deletes a column.", action='append')
   parser.add_argument("-u","--update", help="Column name to update.", type=str)
   parser.add_argument("-n","--new-value", help="New value for update mode (required with -u).", type=str)
   parser.add_argument("-p","--print", help="Print input headers to stderr.", action="store_true")
