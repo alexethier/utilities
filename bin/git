@@ -84,6 +84,10 @@ elif [[ -z "$2" && "$1" == "rebase" ]]; then
   set +e
 elif [[ "$1" == "rebasem" ]]; then
   target_branch="main"
+  if ! $GIT_PATH branch | grep -q "$target_branch"; then
+    target_branch="main"
+  fi
+
   if [[ -n "$2" ]]; then
     target_branch="$2"
   fi
