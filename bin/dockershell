@@ -1,11 +1,48 @@
 #!/bin/bash
+
+# Docker Shell Script
+# Launches a new container from the latest Docker image (or specified image) and connects to it with a shell
+# Automatically cleans up the container when you exit
+
 set -e 
 IFS=$'\n\t'
 
-# This script will find the latest docker image, launch a new container from it, and connect to that container.
+usage() {
+    cat << EOF
+Usage: dockershell [OPTIONS] [IMAGE_ID]
+
+Launch a new container from a Docker image and connect to it with a shell.
+By default uses the latest image, or you can specify an image ID.
+
+OPTIONS:
+    -l, --login        Connect to an existing container instead of creating new one
+    --noroot           Don't run as root user (use container's default user)
+    --no-root          Same as --noroot
+    -s, --shell SHELL  Specify shell to use (default: /bin/bash)
+    -v                 Verbose mode (set -x)
+    -h, --help         Show this help message
+
+ARGUMENTS:
+    IMAGE_ID           Optional: specific image ID to use (defaults to latest image)
+
+EXAMPLES:
+    dockershell                           # Use latest image with /bin/bash as root
+    dockershell -s /bin/sh                # Use latest image with /bin/sh
+    dockershell --noroot ubuntu:20.04     # Use ubuntu:20.04 as non-root user
+    dockershell --login                   # Connect to existing container
+
+WORKFLOW:
+    1. Finds latest Docker image (or uses specified image)
+    2. Launches new container with specified shell
+    3. Connects you to the container with interactive shell
+    4. When you exit, container is automatically cleaned up
+
+EOF
+}
 
 LOGIN_ONLY=false
 ROOT=true
+SHELL="/bin/bash"
 
 # Parse command line
 while [[ $# > 0 ]]
@@ -26,11 +63,20 @@ do
         --no-root)
             ROOT=false
             ;;
+        -s|--shell)
+            SHELL="$2"
+            shift
+            ;;
         -v)
             set -x
             ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
         *)
             echo "Unknown option passed: $key"
+            echo "Use -h or --help for usage information."
             exit 1
             ;;
     esac
@@ -38,27 +84,41 @@ do
 done
 
 if [ "$LOGIN_ONLY" = "false" ]; then
-
+    # Create new container mode
+    
+    # Get latest image ID if no specific image provided
     IMAGE_ID=`docker images | head -n 2 | grep -v REPOSITORY | tr -s ' ' | cut -d ' ' -f3`
     if [ -n "$1" ]; then
         IMAGE_ID="$1"
     fi
     
+    # Set up root user flag if requested
     ROOT_CMD=""
     if [ "$ROOT" = true ] ; then
         ROOT_CMD="--user root"
     fi
-    CONT_ID=`eval "docker run -idt ${ROOT_CMD} $IMAGE_ID /bin/bash"`
     
+    # Launch new container with specified shell
+    echo "Launching new container from image: $IMAGE_ID"
+    echo "Using shell: $SHELL"
+    CONT_ID=`eval "docker run -idt ${ROOT_CMD} $IMAGE_ID $SHELL"`
+    echo "Container ID: $CONT_ID"
     
+    # Set up cleanup function to remove container on exit
     function clean {
+      echo "Cleaning up container: $CONT_ID"
       docker rm -f $CONT_ID
     }
     trap clean EXIT
 
 else
+    # Login to existing container mode
+    echo "Connecting to existing container..."
     CONT_ID=`docker ps -a | head -n 2 | tail -n 1 | cut -d' ' -f1`
+    echo "Container ID: $CONT_ID"
 fi
 
-docker exec -it $CONT_ID /bin/bash
+# Connect to the container with interactive shell
+echo "Connecting to container with $SHELL..."
+docker exec -it $CONT_ID $SHELL
 
