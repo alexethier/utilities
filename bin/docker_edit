@@ -107,11 +107,80 @@ echo "Snapshot created successfully: $OUTPUT_IMAGE"
 
 if [ "$FLATTEN" = true ]; then
     echo "Flattening image to make it independent..."
-    TEMP_IMAGE="${OUTPUT_IMAGE}-temp"
-    docker tag "$OUTPUT_IMAGE" "$TEMP_IMAGE"
-    docker export "$CONTAINER_NAME" | docker import - "$OUTPUT_IMAGE"
-    docker rmi "$TEMP_IMAGE" >/dev/null 2>&1 || true
-    echo "Image flattened and made independent"
+    
+    # Get the original image to copy its configuration
+    ORIGINAL_IMAGE="$INPUT_IMAGE"
+    
+    # Create a temporary tarball of the container filesystem
+    TEMP_TAR="/tmp/container-${CONTAINER_NAME}.tar"
+    echo "Exporting container filesystem..."
+    docker export "$CONTAINER_NAME" > "$TEMP_TAR"
+    
+    # Import the tarball as a base image (no metadata)
+    TEMP_BASE_IMAGE="${OUTPUT_IMAGE}-base"
+    docker import "$TEMP_TAR" "$TEMP_BASE_IMAGE"
+    
+    # Now create a new container from the base and copy the original image's config
+    echo "Copying original image configuration..."
+    TEMP_CONTAINER="${CONTAINER_NAME}-config"
+    
+    # Get original image config
+    ORIGINAL_CMD=$(docker inspect "$ORIGINAL_IMAGE" --format='{{json .Config.Cmd}}')
+    ORIGINAL_ENTRYPOINT=$(docker inspect "$ORIGINAL_IMAGE" --format='{{json .Config.Entrypoint}}')
+    ORIGINAL_ENV=$(docker inspect "$ORIGINAL_IMAGE" --format='{{.Config.Env}}')
+    ORIGINAL_WORKDIR=$(docker inspect "$ORIGINAL_IMAGE" --format='{{.Config.WorkingDir}}')
+    ORIGINAL_USER=$(docker inspect "$ORIGINAL_IMAGE" --format='{{.Config.User}}')
+    
+    echo "Original config found:"
+    echo "  CMD: $ORIGINAL_CMD"
+    echo "  ENTRYPOINT: $ORIGINAL_ENTRYPOINT"
+    echo "  ENV: $ORIGINAL_ENV"
+    echo "  WORKDIR: $ORIGINAL_WORKDIR"
+    echo "  USER: $ORIGINAL_USER"
+    
+    # Create final image by committing the base with original config
+    docker create --name "$TEMP_CONTAINER" "$TEMP_BASE_IMAGE" /bin/true >/dev/null
+    
+    # Build commit options to restore original config
+    COMMIT_OPTIONS=""
+    if [ "$ORIGINAL_CMD" != "null" ] && [ "$ORIGINAL_CMD" != "[]" ]; then
+        COMMIT_OPTIONS="$COMMIT_OPTIONS --change='CMD $ORIGINAL_CMD'"
+    fi
+    if [ "$ORIGINAL_ENTRYPOINT" != "null" ] && [ "$ORIGINAL_ENTRYPOINT" != "[]" ]; then
+        # Escape inner quotes in the JSON for proper command construction
+        ESCAPED_ENTRYPOINT=$(echo "$ORIGINAL_ENTRYPOINT" | sed 's/"/\\"/g')
+        COMMIT_OPTIONS="$COMMIT_OPTIONS --change=\"ENTRYPOINT $ESCAPED_ENTRYPOINT\""
+    fi
+    if [ -n "$ORIGINAL_WORKDIR" ] && [ "$ORIGINAL_WORKDIR" != "" ]; then
+        COMMIT_OPTIONS="$COMMIT_OPTIONS --change='WORKDIR $ORIGINAL_WORKDIR'"
+    fi
+    if [ -n "$ORIGINAL_USER" ] && [ "$ORIGINAL_USER" != "" ]; then
+        COMMIT_OPTIONS="$COMMIT_OPTIONS --change='USER $ORIGINAL_USER'"
+    fi
+    
+    # Apply environment variables
+    if [ "$ORIGINAL_ENV" != "[]" ] && [ -n "$ORIGINAL_ENV" ]; then
+        # Parse the format: [VAR1=value1 VAR2=value2] and convert to --change options
+        ENV_VARS=$(echo "$ORIGINAL_ENV" | sed 's/^\[//' | sed 's/\]$//' | tr ' ' '\n' | while read env; do 
+            if [ -n "$env" ]; then 
+                echo "--change='ENV $env'"; 
+            fi 
+        done | tr '\n' ' ')
+        COMMIT_OPTIONS="$COMMIT_OPTIONS $ENV_VARS"
+    fi
+    
+    ## echo "Committing with options: $COMMIT_OPTIONS"
+    ## echo "EXACT COMMAND THAT WILL BE EXECUTED:"
+    ## echo "docker commit $COMMIT_OPTIONS \"$TEMP_CONTAINER\" \"$OUTPUT_IMAGE\""
+    ## echo ""
+    eval "docker commit $COMMIT_OPTIONS \"$TEMP_CONTAINER\" \"$OUTPUT_IMAGE\""
+    
+    # Cleanup
+    docker rm "$TEMP_CONTAINER" >/dev/null 2>&1 || true
+    docker rmi "$TEMP_BASE_IMAGE" >/dev/null 2>&1 || true
+    rm -f "$TEMP_TAR"
+    
+    echo "Image flattened and made independent with original configuration preserved"
 fi
 
 # Show the new image
