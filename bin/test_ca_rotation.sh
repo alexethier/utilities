@@ -115,27 +115,18 @@ echo
 echo "=== Certificate Details ==="
 echo
 echo "--- CA1 Certificate ---"
-openssl x509 -in ca1.crt -noout -text | grep -E "(Subject:|Serial Number:|Not Before:|Not After:)" | sed 's/^[[:space:]]*//'
+openssl x509 -in ca1.crt -noout -text | grep -E "(Subject:|Not Before:|Not After :)" | sed 's/^[[:space:]]*//'
+echo "CA1 Public Key SHA256: $(openssl x509 -in ca1.crt -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 | cut -d' ' -f2)"
 
 echo
 echo "--- CA2 Certificate ---"
-openssl x509 -in ca2.crt -noout -text | grep -E "(Subject:|Serial Number:|Not Before:|Not After:)" | sed 's/^[[:space:]]*//'
+openssl x509 -in ca2.crt -noout -text | grep -E "(Subject:|Not Before:|Not After :)" | sed 's/^[[:space:]]*//'
+echo "CA2 Public Key SHA256: $(openssl x509 -in ca2.crt -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 | cut -d' ' -f2)"
 
 echo
 echo "--- CA3 Certificate ---"
-openssl x509 -in ca3.crt -noout -text | grep -E "(Subject:|Serial Number:|Not Before:|Not After:)" | sed 's/^[[:space:]]*//'
-
-echo
-echo "--- Server1 Certificate ---"
-openssl x509 -in server1.crt -noout -text | grep -E "(Subject:|Issuer:|Not Before:|Not After:|Subject Alternative Name:)" | sed 's/^[[:space:]]*//'
-
-echo
-echo "--- Server2 Certificate ---"
-openssl x509 -in server2.crt -noout -text | grep -E "(Subject:|Issuer:|Not Before:|Not After:|Subject Alternative Name:)" | sed 's/^[[:space:]]*//'
-
-echo
-echo "--- Server3 Certificate ---"
-openssl x509 -in server3.crt -noout -text | grep -E "(Subject:|Issuer:|Not Before:|Not After:|Subject Alternative Name:)" | sed 's/^[[:space:]]*//'
+openssl x509 -in ca3.crt -noout -text | grep -E "(Subject:|Not Before:|Not After :)" | sed 's/^[[:space:]]*//'
+echo "CA3 Public Key SHA256: $(openssl x509 -in ca3.crt -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 | cut -d' ' -f2)"
 
 # Show why cross-validation will succeed or fail
 echo
@@ -143,19 +134,18 @@ echo "=== Understanding Certificate Verification ==="
 echo "For verification to succeed:"
 echo "1. Certificate's Issuer must match CA's Subject"
 echo "2. Certificate must be signed by CA's private key"
+
 echo
-echo "Server1 Issuer: $(openssl x509 -in server1.crt -noout -issuer | cut -d' ' -f2-)"
-echo "CA1 Subject: $(openssl x509 -in ca1.crt -noout -subject | cut -d' ' -f2-)"
-echo "CA1 Public Key SHA256: $(openssl x509 -in ca1.crt -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 | cut -d' ' -f2)"
+echo "--- Server1 Certificate ---"
+openssl x509 -in server1.crt -noout -text | grep -E "(Subject:|Issuer:|Not Before:|Not After:)" | sed 's/^[[:space:]]*//'
+
 echo
-echo "Server2 Issuer: $(openssl x509 -in server2.crt -noout -issuer | cut -d' ' -f2-)"
-echo "CA2 Subject: $(openssl x509 -in ca2.crt -noout -subject | cut -d' ' -f2-)"
-echo "CA2 Public Key SHA256: $(openssl x509 -in ca2.crt -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 | cut -d' ' -f2)"
-echo ""
-echo "Server3 Issuer: $(openssl x509 -in server3.crt -noout -issuer | cut -d' ' -f2-)"
-echo "CA3 Subject: $(openssl x509 -in ca3.crt -noout -subject | cut -d' ' -f2-)"
-echo "CA3 Public Key SHA256: $(openssl x509 -in ca3.crt -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 | cut -d' ' -f2)"
+echo "--- Server2 Certificate ---"
+openssl x509 -in server2.crt -noout -text | grep -E "(Subject:|Issuer:|Not Before:|Not After:)" | sed 's/^[[:space:]]*//'
+
 echo
+echo "--- Server3 Certificate ---"
+openssl x509 -in server3.crt -noout -text | grep -E "(Subject:|Issuer:|Not Before:|Not After:)" | sed 's/^[[:space:]]*//'
 
 # Verify certificates
 echo
