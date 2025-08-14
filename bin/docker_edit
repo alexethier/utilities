@@ -1,0 +1,86 @@
+#!/bin/bash
+
+# Docker Snapshot Script
+# Launches a Docker image, shells into it, and creates a snapshot with a new tag
+
+set -e
+
+usage() {
+    cat << EOF
+Usage: docker-snapshot INPUT_IMAGE OUTPUT_TAG
+
+Launch a Docker image, shell into it, make changes, and create a snapshot.
+
+ARGUMENTS:
+    INPUT_IMAGE    The Docker image to launch (e.g., ubuntu:20.04)
+    OUTPUT_TAG     The tag for the new snapshot image (e.g., my-modified-ubuntu:latest)
+
+EXAMPLES:
+    docker-snapshot ubuntu:20.04 my-ubuntu:v1
+    docker-snapshot alpine:latest my-alpine:modified
+
+WORKFLOW:
+    1. Script launches the specified Docker image
+    2. You get a shell inside the container
+    3. Make your changes inside the container
+    4. Exit the shell (Ctrl+D or 'exit')
+    5. Script creates a snapshot with the specified output tag
+    6. Container is automatically cleaned up
+
+EOF
+}
+
+error() {
+    echo "[ERROR] $1" >&2
+    exit 1
+}
+
+# Parse command line arguments
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    usage
+    exit 0
+fi
+
+if [ $# -ne 2 ]; then
+    error "Exactly 2 arguments required: INPUT_IMAGE and OUTPUT_TAG. Use -h for help."
+fi
+
+INPUT_IMAGE="$1"
+OUTPUT_TAG="$2"
+
+# Extract repository name from input image to build proper output image name
+if [[ "$INPUT_IMAGE" == *":"* ]]; then
+    REPO_NAME="${INPUT_IMAGE%:*}"
+    OUTPUT_IMAGE="${REPO_NAME}:${OUTPUT_TAG}"
+else
+    OUTPUT_IMAGE="$OUTPUT_TAG"
+fi
+
+# Generate unique container name
+CONTAINER_NAME="snapshot-$(date +%s)-$$"
+
+# Set up cleanup trap to remove container
+cleanup() {
+    if [ -n "$CONTAINER_NAME" ]; then
+        echo "Cleaning up container: $CONTAINER_NAME"
+        docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
+
+echo "Starting container: $CONTAINER_NAME from image: $INPUT_IMAGE"
+echo "Make your changes inside the container, then exit to create snapshot."
+echo ""
+
+docker run -it --user root --entrypoint "/bin/sh" --name "$CONTAINER_NAME" "$INPUT_IMAGE"
+
+echo ""
+echo "Creating snapshot: $OUTPUT_IMAGE"
+docker commit "$CONTAINER_NAME" "$OUTPUT_IMAGE"
+echo "Snapshot created successfully: $OUTPUT_IMAGE"
+
+# Show the new image
+echo ""
+echo "New image details:"
+docker images | head -1  # header
+docker images | grep "$OUTPUT_TAG" | head -1
