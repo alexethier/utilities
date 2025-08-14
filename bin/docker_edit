@@ -7,7 +7,7 @@ set -e
 
 usage() {
     cat << EOF
-Usage: docker-snapshot INPUT_IMAGE OUTPUT_TAG
+Usage: docker_edit [OPTIONS] INPUT_IMAGE OUTPUT_TAG
 
 Launch a Docker image, shell into it, make changes, and create a snapshot.
 
@@ -15,9 +15,13 @@ ARGUMENTS:
     INPUT_IMAGE    The Docker image to launch (e.g., ubuntu:20.04)
     OUTPUT_TAG     The tag for the new snapshot image (e.g., my-modified-ubuntu:latest)
 
+OPTIONS:
+    --no-flatten   Don't flatten the image (keeps layer dependencies)
+    -h, --help     Show this help message
+
 EXAMPLES:
-    docker-snapshot ubuntu:20.04 my-ubuntu:v1
-    docker-snapshot alpine:latest my-alpine:modified
+    docker_edit ubuntu:20.04 my-ubuntu:v1
+    docker_edit --no-flatten alpine:latest my-alpine:modified
 
 WORKFLOW:
     1. Script launches the specified Docker image
@@ -25,7 +29,8 @@ WORKFLOW:
     3. Make your changes inside the container
     4. Exit the shell (Ctrl+D or 'exit')
     5. Script creates a snapshot with the specified output tag
-    6. Container is automatically cleaned up
+    6. By default, creates a flattened independent image
+    7. Container is automatically cleaned up
 
 EOF
 }
@@ -35,18 +40,39 @@ error() {
     exit 1
 }
 
+# Default settings
+FLATTEN=true
+
 # Parse command line arguments
-if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    usage
-    exit 0
-fi
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-flatten)
+            FLATTEN=false
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            error "Unknown option: $1. Use -h for help."
+            ;;
+        *)
+            if [ -z "$INPUT_IMAGE" ]; then
+                INPUT_IMAGE="$1"
+            elif [ -z "$OUTPUT_TAG" ]; then
+                OUTPUT_TAG="$1"
+            else
+                error "Too many arguments. Use -h for help."
+            fi
+            shift
+            ;;
+    esac
+done
 
-if [ $# -ne 2 ]; then
-    error "Exactly 2 arguments required: INPUT_IMAGE and OUTPUT_TAG. Use -h for help."
+if [ -z "$INPUT_IMAGE" ] || [ -z "$OUTPUT_TAG" ]; then
+    error "Both INPUT_IMAGE and OUTPUT_TAG are required. Use -h for help."
 fi
-
-INPUT_IMAGE="$1"
-OUTPUT_TAG="$2"
 
 # Extract repository name from input image to build proper output image name
 if [[ "$INPUT_IMAGE" == *":"* ]]; then
@@ -78,6 +104,15 @@ echo ""
 echo "Creating snapshot: $OUTPUT_IMAGE"
 docker commit "$CONTAINER_NAME" "$OUTPUT_IMAGE"
 echo "Snapshot created successfully: $OUTPUT_IMAGE"
+
+if [ "$FLATTEN" = true ]; then
+    echo "Flattening image to make it independent..."
+    TEMP_IMAGE="${OUTPUT_IMAGE}-temp"
+    docker tag "$OUTPUT_IMAGE" "$TEMP_IMAGE"
+    docker export "$CONTAINER_NAME" | docker import - "$OUTPUT_IMAGE"
+    docker rmi "$TEMP_IMAGE" >/dev/null 2>&1 || true
+    echo "Image flattened and made independent"
+fi
 
 # Show the new image
 echo ""
