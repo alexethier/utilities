@@ -1,6 +1,47 @@
 #!/bin/bash
+
+# Visual Git - pretty git log with colorized branch graph
+# Shows commit history in an easy-to-read visual format
+
 set -eu -o pipefail
 IFS=$'\n\t'
 
-# Taken from https://stackoverflow.com/questions/1057564/pretty-git-branch-graphs
+usage() {
+    cat << EOF
+Usage: vgit [OPTIONS]
+
+Display a colorized, visual git log with branch graphs.
+
+OPTIONS:
+    -h, --help    Show this help message
+
+EXAMPLES:
+    vgit          # Show visual git log for all branches
+
+FEATURES:
+    - Colorized output with branch graphs
+    - Shows commit hash, relative time, message, and author
+    - Displays branch and tag information
+    - Includes all branches in the visualization
+
+OUTPUT FORMAT:
+    * [hash] - (time ago) commit message - author [branch/tag info]
+
+WORKFLOW:
+    Uses git log with custom formatting to create an easy-to-read
+    visual representation of your repository's commit history.
+
+CREDIT:
+    Format taken from https://stackoverflow.com/questions/1057564/pretty-git-branch-graphs
+
+EOF
+}
+
+# Parse arguments
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    usage
+    exit 0
+fi
+
+# Display pretty git log with branch graph
 git log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(bold yellow)%d%C(reset)' --all

@@ -1,5 +1,39 @@
 #!/bin/bash
-# Highly expiramental script to unzip a nested zip file, will unzip other found zipfiles recursively.
+
+# Unzip - recursively find and extract zip files with filtering
+# Searches for zip files and extracts them to organized directory structure
+
+set -e
+
+usage() {
+    cat << EOF
+Usage: lunzip [OPTIONS]
+
+Recursively find and extract zip files with optional filtering.
+
+OPTIONS:
+    -t, --type TYPE        File extension to search for (e.g., zip, tar, gz)
+    -f, --filter FILTER    Only process files containing this string in filename
+    -h, --help             Show this help message
+
+EXAMPLES:
+    lunzip -t zip                    # Extract all .zip files
+    lunzip -t zip -f "backup"        # Extract only zip files with "backup" in name
+    lunzip --type tar --filter 2023  # Extract tar files from 2023
+
+WORKFLOW:
+    1. Searches current directory for files with specified extension
+    2. Filters results by filename pattern if specified
+    3. Creates organized directory structure in ./unzips/
+    4. Extracts each matching file to its own subdirectory
+
+OUTPUT STRUCTURE:
+    ./unzips/path/to/file.zip/       # Each file gets its own directory
+    ├── file.zip                     # Original file copied here
+    └── [extracted contents]         # Contents extracted alongside
+
+EOF
+}
 
 TYPE=""
 FILTER=""
@@ -18,24 +52,21 @@ do
     fi
 
     case $key in
-        -t)
+        -t|--type)
             TYPE="$value"
             shift
             ;;
-        --type)
-            TYPE="$value"
-            shift
-            ;;
-        -f)
+        -f|--filter)
             FILTER="$value"
             shift
             ;;
-        --filter)
-            FILTER="$value"
-            shift
+        -h|--help)
+            usage
+            exit 0
             ;;
         *)
             echo "Unknown option passed: $key"
+            echo "Use -h or --help for usage information."
             exit 1
             ;;
     esac

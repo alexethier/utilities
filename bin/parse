@@ -1,8 +1,52 @@
 #!/bin/bash
 
-# This script will attempt to parse the input text into multiple output formats.
+# Parse - convert text between different formats (JSON, Python, lists, etc.)
+# Provides multiple output formats for the same input data
+
+usage() {
+    cat << EOF
+Usage: parse [OPTIONS] INPUT_TEXT
+
+Convert input text between different formats (JSON, Python lists, etc.).
+
+OPTIONS:
+    -h, --help    Show this help message
+
+ARGUMENTS:
+    INPUT_TEXT    Text to parse and convert
+
+EXAMPLES:
+    parse "['item1', 'item2', 'item3']"
+    parse "{'key': 'value', 'number': 123}"
+    parse "[1, 2, 3, 4, 5]"
+
+OUTPUT FORMATS:
+    Format 1: Converts JSON/Python lists to flat space-separated list
+    Format 2: Converts Python syntax to valid JSON
+    Format 3: Converts lists to command-line friendly format
+
+WORKFLOW:
+    1. Takes input text as arguments
+    2. Applies multiple transformation patterns
+    3. Shows all possible format conversions
+    4. Useful for converting between Python/JSON/shell formats
+
+EOF
+}
+
+# Parse arguments
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    usage
+    exit 0
+fi
 
 input="$@"
+
+if [ -z "$input" ]; then
+    echo "Error: Input text is required."
+    echo "Use -h or --help for usage information."
+    exit 1
+fi
 
 # Convert json list to new format
 format=`echo "$input" | sed 's/\[//g' | sed 's/\]//g' | sed "s/'//g" | sed 's/,/ /g' | sed 's/  / /g'`

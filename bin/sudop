@@ -3,5 +3,37 @@
 # Script to become root without losing your env. variables.
 # -E retains all env. variables except a single undocumented one, the only one we actually fruit caking want, the PATH!
 
+usage() {
+    cat << EOF
+Usage: sudop [OPTIONS]
+
+Become root user while preserving all environment variables, especially PATH.
+
+OPTIONS:
+    -h, --help    Show this help message
+
+EXAMPLES:
+    sudop         # Become root with preserved environment
+
+WORKFLOW:
+    1. Preserves current PATH variable
+    2. Uses sudo -E to retain environment variables
+    3. Explicitly sets PATH to your original PATH
+    4. Launches bash as root with full environment
+
+NOTE:
+    This solves the common problem where 'sudo bash' loses your custom PATH,
+    making commands installed in user directories unavailable.
+
+EOF
+}
+
+# Parse arguments
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    usage
+    exit 0
+fi
+
+# Preserve PATH and become root with full environment
 PATHP=$PATH
 sudo -E PATH="$PATHP" /bin/bash

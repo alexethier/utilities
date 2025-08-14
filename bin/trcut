@@ -1,20 +1,59 @@
 #!/bin/bash
 
-# This is a shortcut for the command: cut -d'<DELIM> -f<COLUMN #>
-# cut works pretty well, but tr -s ' ' is often needed when DELIM=' ' and there are consecutive whitespaces
-# Additionally, this script trims whitespace from the start/end of the string
+# Trim Cut - enhanced cut command that handles whitespace better
+# Combines tr, cut, and sed to extract columns from delimited text with proper whitespace handling
+
+usage() {
+    cat << EOF
+Usage: trcut COLUMN [DELIMITER]
+
+Extract a specific column from delimited input with intelligent whitespace handling.
+
+ARGUMENTS:
+    COLUMN       Column number to extract (1-based)
+    DELIMITER    Field delimiter (default: space)
+
+EXAMPLES:
+    echo "  one   two   three  " | trcut 2        # Extracts "two"
+    echo "a,b,c" | trcut 2 ","                    # Extracts "b"
+    ps aux | trcut 2                              # Extract 2nd column from ps output
+    cat file.txt | trcut 3 ":"                    # Extract 3rd colon-separated field
+
+FEATURES:
+    - Collapses multiple consecutive spaces into single spaces
+    - Trims leading and trailing whitespace from results
+    - Works with any delimiter
+    - Processes input line by line from stdin
+
+WORKFLOW:
+    1. Reads input line by line from stdin
+    2. Collapses consecutive spaces with tr -s
+    3. Extracts specified column with cut
+    4. Trims whitespace from result with sed
+
+EOF
+}
+
+# Parse arguments
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    usage
+    exit 0
+fi
 
 column="$1"
 delim=" "
 
-if [ -z "column" ]; then
-  echo "Missing single input argument - column number."
+if [ -z "$column" ]; then
+    echo "Error: Column number is required."
+    echo "Use -h or --help for usage information."
+    exit 1
 fi
 
-if [ ! -z "$2" ]; then
-  delim="$2"
+if [ -n "$2" ]; then
+    delim="$2"
 fi
 
+# Process input line by line
 while IFS= read -r line; do
     echo "$line" | tr -s ' ' | cut -d"$delim" -f${column} | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 done

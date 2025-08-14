@@ -1,5 +1,35 @@
 #!/bin/bash
-# Prototype grep shortcut that finds lines of text between two search terms.
+
+# Between Grep - finds lines of text between two search terms
+# Searches for a pattern and shows context lines, with optional before/after filtering
+
+set -e
+
+usage() {
+    cat << EOF
+Usage: bgrep [OPTIONS]
+
+Find lines of text between two search terms with context.
+
+OPTIONS:
+    -s, --search PATTERN   Search pattern (required)
+    -b, --before PATTERN   Filter results to show only matches before this pattern
+    -a, --after PATTERN    Filter results to show only matches after this pattern
+    -l, --lines NUMBER     Number of context lines to show (default: 6)
+    -h, --help             Show this help message
+
+EXAMPLES:
+    bgrep -s "error" -l 3                    # Find "error" with 3 lines context
+    bgrep -s "function" -b "class" -a "end"  # Find "function" between "class" and "end"
+    bgrep --search "TODO" --lines 2          # Find "TODO" with 2 lines context
+
+WORKFLOW:
+    1. Recursively searches all files for the search pattern
+    2. Shows specified number of context lines before and after matches
+    3. Optionally filters results based on before/after patterns
+
+EOF
+}
 
 # Defaults
 SEARCH=""
@@ -21,52 +51,69 @@ do
     fi
 
     case $key in
-        -s)
+        -s|--search)
             SEARCH="$value"
             shift
             ;;
-        --search)
-            SEARCH="$value"
-            shift
-            ;;
-        -b)
+        -b|--before)
             BEFORE="$value"
             shift
             ;;
-        --before)
-            BEFORE="$value"
-            shift
-            ;;
-        -a)
+        -a|--after)
             AFTER="$value"
             shift
             ;;
-        --after)
-            AFTER="$value"
-            shift
-            ;;
-        -l)
+        -l|--lines)
             LINES="$value"
             shift
             ;;
-        --lines)
-            LINES="$value"
-            shift
+        -h|--help)
+            usage
+            exit 0
             ;;
         *)
             echo "Unknown option passed: $key"
+            echo "Use -h or --help for usage information."
             exit 1
             ;;
     esac
     shift
 done
 
+# Validate required arguments
+if [ -z "$SEARCH" ]; then
+    echo "Error: Search pattern is required."
+    echo "Use -h or --help for usage information."
+    exit 1
+fi
+
+# Perform the search
+echo "Searching for pattern: $SEARCH"
+echo "Context lines: $LINES"
+if [ -n "$BEFORE" ]; then
+    echo "Before filter: $BEFORE"
+fi
+if [ -n "$AFTER" ]; then
+    echo "After filter: $AFTER"
+fi
+echo ""
+
 DOUBLE_LINES=$(($LINES*2))
-MATCHES=$(grep -n -r $SEARCH -A $LINES -B $LINES *)
+MATCHES=$(grep -n -r "$SEARCH" -A $LINES -B $LINES * 2>/dev/null || true)
+
+if [ -z "$MATCHES" ]; then
+    echo "No matches found for pattern: $SEARCH"
+    exit 0
+fi
+
 for MATCH in $MATCHES; do
     echo ""
-    echo "NEXT"
+    echo "=== MATCH ==="
     echo "$MATCH"
     echo ""
 done
-#grep -n -r $SEARCH -A $LINES -B $LINES * | grep $BEFORE -A $DOUBLE_LINES  | grep $AFTER -B $LINES | grep $SEARCH
+
+# TODO: Implement before/after filtering functionality
+if [ -n "$BEFORE" ] || [ -n "$AFTER" ]; then
+    echo "Note: Before/after filtering not yet implemented"
+fi

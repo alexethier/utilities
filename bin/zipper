@@ -1,9 +1,43 @@
 #!/bin/bash
 
+# Zipper - intelligent zip file manager with open/close workflow
+# Maintains state to recreate zip files from extracted directories
+
 set -eu -o pipefail
 IFS=$'\n\t'
 
-HELP_TEXT="zipper -o <filename>: Open or unzip a zip file.\nzipper -c: Close or create a zip file from a previously unzipped directory\n -z: Skip making a backup file"
+usage() {
+    cat << EOF
+Usage: zipper [OPTIONS]
+
+Intelligent zip file manager that tracks extracted files for easy re-zipping.
+
+OPTIONS:
+    -o, --open FILE        Open/extract a zip file to working directory
+    -c, --close            Close/recreate zip from previously extracted directory
+    -z, --skip-backup      Skip creating backup of original zip file
+    -v, --verbose          Verbose mode (set -x)
+    -h, --help             Show this help message
+
+EXAMPLES:
+    zipper -o archive.zip                 # Extract archive.zip to aetmp_archive.zip/
+    zipper --close                        # Recreate zip from current directory
+    zipper -o file.zip --skip-backup      # Extract without backup
+
+WORKFLOW:
+    OPEN:  1. Creates working directory (aetmp_<filename>)
+           2. Copies zip file to working directory
+           3. Extracts contents
+           4. Saves metadata for later recreation
+
+    CLOSE: 1. Finds UNZIP_PROPERTIES.txt in directory hierarchy
+           2. Recreates zip file with same name
+           3. Optionally backs up original
+           4. Cleans up working directory
+
+EOF
+}
+
 PROPERTIES_FILE="UNZIP_PROPERTIES.txt"
 UNZIP_PREFIX="aetmp"
 OPEN_FILEPATH=""
@@ -19,40 +53,26 @@ do
     set -u
 
     case $key in
-        --open)
+        -o|--open)
             OPEN_FILEPATH="$value"
             shift
             ;;
-        -o)
-            OPEN_FILEPATH="$value"
-            shift
-            ;;
-        --close)
+        -c|--close)
             CLOSE_DIR="true"
             ;;
-        -c)
-            CLOSE_DIR="true"
-            ;;
-        --skip-backup)
+        -z|--skip-backup)
             SKIP_BACKUP="true"
             ;;
-        -z)
-            SKIP_BACKUP="true"
+        -h|--help)
+            usage
+            exit 0
             ;;
-        --help)
-            echo -e $HELP_TEXT
-            ;;
-        -h)
-            echo -e $HELP_TEXT
-            ;;
-        -v)
-            set -x
-            ;;
-        --verbose)
+        -v|--verbose)
             set -x
             ;;
         *)
             echo "Unknown option passed: $key"
+            echo "Use -h or --help for usage information."
             exit 1
             ;;
     esac
