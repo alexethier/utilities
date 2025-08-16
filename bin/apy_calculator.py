@@ -152,27 +152,14 @@ Note: Premium is per share. Total contract premium = premium × 100 shares
     )
     
     parser.add_argument(
-        'symbol',
-        nargs='?',
-        help='Option symbol (e.g., SHOP270115P00140000) - can also use --symbol/-s'
-    )
-    
-    parser.add_argument(
-        'stock_price',
-        nargs='?',
-        type=float,
-        help='Current stock price - can also use --current-price/-c'
-    )
-    
-    parser.add_argument(
         '-s', '--symbol',
-        dest='symbol_flag',
-        help='Option symbol (e.g., SHOP270115P00140000)'
+        dest='option_symbol',
+        help='Symbol (e.g., SHOP270115P00140000)'
     )
     
     parser.add_argument(
         '-c', '--current-price',
-        dest='price_flag',
+        dest='stock_price',
         type=float,
         help='Current stock price'
     )
@@ -185,66 +172,54 @@ Note: Premium is per share. Total contract premium = premium × 100 shares
     
     args = parser.parse_args()
     
-    try:
-        # Determine symbol - use flag if provided, otherwise positional
-        symbol = args.symbol_flag if args.symbol_flag else args.symbol
-        if not symbol:
-            parser.error("Option symbol is required. Use positional argument or --symbol/-s flag.")
-        
-        # Determine stock price - use flag if provided, otherwise positional
-        stock_price = args.price_flag if args.price_flag is not None else args.stock_price
-        if stock_price is None:
-            parser.error("Stock price is required. Use positional argument or --current-price/-c flag.")
-        
-        # Parse the option symbol
-        ticker, expiration_date, option_type, strike_price = parse_option_symbol(symbol)
-        
-        # Calculate days to expiration
-        days_to_expiry = calculate_days_to_expiration(expiration_date)
-        
-        # Calculate coverage amount
-        coverage_amount = calculate_coverage_amount(option_type, stock_price, strike_price)
-        
-        # Display parsed information
-        option_type_full = "Put" if option_type == 'P' else "Call"
-        print(f"Option Analysis for {symbol}")
-        print(f"{'='*50}")
-        print(f"Ticker:                 {ticker}")
-        print(f"Option Type:            {option_type_full}")
-        print(f"Strike Price:           ${strike_price:.2f}")
-        print(f"Current Price:          ${stock_price:.2f}")
-        print(f"Expiration:             {expiration_date.strftime('%B %d, %Y')}")
-        print(f"Days to Expiry:         {days_to_expiry}")
-        print(f"Coverage Amount:        ${coverage_amount:,.2f}")
-        
-        # Calculate APY if premium is provided
-        if args.premium is not None:
-            # Convert per-share premium to total contract premium (100 shares per contract)
-            total_premium = args.premium * 100
-            
-            apy = calculate_apy(total_premium, coverage_amount, days_to_expiry)
-            
-            # Calculate compounding details for display
-            periodic_rate = total_premium / coverage_amount
-            periods_per_year = 365 / days_to_expiry
-            
-            print(f"Interest per period:    {periodic_rate * 100:.4g}%")
-            print(f"Compounding periods/yr: {periods_per_year:.2f}")
-            print(f"Total premium:          ${total_premium:.2f}")
-            print(f"APY:                    {apy:.4g}%")
-        else:
-            print(f"\nTo calculate APY, provide --premium/-p option")
-            print(f"Example: {parser.prog} -s {symbol} -c {stock_price} -p 2.50")
-    
-    except ValueError as e:
-        print(f"Error: {e}")
-        return 1
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return 1
-    
-    return 0
+    # Determine stock price - use flag if provided, otherwise positional
+    if args.stock_price is None:
+        parser.error("Stock price is required. Use --current-price/-c flag.")
+    if args.option_symbol is None:
+        parser.error("Option symbol is required. Use --symbol/-s flag.")
 
-
+    stock_price = args.stock_price
+    option_symbol = args.option_symbol
+    
+    # Parse the option symbol
+    ticker, expiration_date, option_type, strike_price = parse_option_symbol(option_symbol)
+    
+    # Calculate days to expiration
+    days_to_expiry = calculate_days_to_expiration(expiration_date)
+    
+    # Calculate coverage amount
+    coverage_amount = calculate_coverage_amount(option_type, stock_price, strike_price)
+    
+    # Display parsed information
+    option_type_full = "Put" if option_type == 'P' else "Call"
+    print(f"Option Analysis for {option_symbol}")
+    print(f"{'='*50}")
+    print(f"Ticker:                 {ticker}")
+    print(f"Option Type:            {option_type_full}")
+    print(f"Strike Price:           ${strike_price:.2f}")
+    print(f"Current Price:          ${stock_price:.2f}")
+    print(f"Expiration:             {expiration_date.strftime('%B %d, %Y')}")
+    print(f"Days to Expiry:         {days_to_expiry}")
+    print(f"Coverage Amount:        ${coverage_amount:,.2f}")
+    
+    # Calculate APY if premium is provided
+    if args.premium is not None:
+        # Convert per-share premium to total contract premium (100 shares per contract)
+        total_premium = args.premium * 100
+        
+        apy = calculate_apy(total_premium, coverage_amount, days_to_expiry)
+        
+        # Calculate compounding details for display
+        periodic_rate = total_premium / coverage_amount
+        periods_per_year = 365 / days_to_expiry
+        
+        print(f"Interest per period:    {periodic_rate * 100:.4g}%")
+        print(f"Compounding periods/yr: {periods_per_year:.2f}")
+        print(f"Total premium:          ${total_premium:.2f}")
+        print(f"APY:                    {apy:.4g}%")
+    else:
+        print(f"\nTo calculate APY, provide --premium/-p option")
+        print(f"Example: {parser.prog} -s {option_symbol} -c {stock_price} -p 2.50")
+    
 if __name__ == '__main__':
     exit(main())
