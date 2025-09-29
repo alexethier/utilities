@@ -31,12 +31,15 @@ save() {
 }
 
 delete() {
-  TARGET_BRANCH="$1"
+  SAVE_BRANCH="$1"
+  TARGET_BRANCH="$2"
   if [ -z "$TARGET_BRANCH" ]; then
      TARGET_BRANCH=`$GIT_PATH branch --show-current`
      $GIT_PATH checkout main
   fi
-  save $TARGET_BRANCH
+  if [[ "$SAVE_BRANCH" == "true" ]]; then
+     save $TARGET_BRANCH
+  fi
   $GIT_PATH branch -D $TARGET_BRANCH
 }
 
@@ -51,6 +54,15 @@ pull_branch() {
   $GIT_PATH checkout $TARGET_BRANCH
   $GIT_PATH pull
   $GIT_PATH checkout $current_branch
+}
+
+dev() {
+  TARGET_BRANCH=`git branch --show-current`
+  DEV_BRANCH_NAME="dev/ae-$TARGET_BRANCH"
+  $GIT_PATH branch -D $DEV_BRANCH_NAME
+  $GIT_PATH checkout -b $DEV_BRANCH_NAME
+  $GIT_PATH push -u origin $DEV_BRANCH_NAME --force
+  $GIT_PATH checkout $TARGET_BRANCH
 }
 
 print_branch_owners() {
@@ -68,14 +80,18 @@ elif [[ "$1" == "save" ]]; then
   set -e
   save 
   set +e
-elif [[ "$1" == "delete" ]]; then
+elif [[ "$1" == "delete" || "$1" == "d" ]]; then
   set -e
-  TARGET_BRANCH="$2"
+  save_branch="true"
   if [ -z "$2" ]; then
     echo "No target branch specified"
+  elif [[ "$2" == "-s" || "$2" == "--skip" || "$2" == "-skip" || "$2" == "s" ]];then
+    save_branch="false"
+  elif [[ "$2" != -* ]]; then
+    TARGET_BRANCH="$2"
   fi
 
-  delete $TARGET_BRANCH
+  delete $skip_save $TARGET_BRANCH
   set +e
 # Do not override the actual rebase command, do not override if there is a second argument to the rebase command
 elif [[ -z "$2" && "$1" == "rebase" ]]; then
@@ -99,6 +115,8 @@ elif [[ "$1" == "rebasem" ]]; then
 elif [[ "$1" == "owner" || "$1" == "owners" ]]; then
   $GIT_PATH remote prune origin
   print_branch_owners
+elif [[ "$1" == "dev" ]]; then
+  dev
 else
   # JGit will break if the user
   # sets their gpg format to ssh
