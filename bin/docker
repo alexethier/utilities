@@ -2,6 +2,8 @@
 # set -x
 
 DOCKER_PATH=""
+DOCKER_PUSH_DIR="$HOME/.aedev"
+DOCKER_PUSH_LOG="$DOCKER_PUSH_DIR/docker_pushes.txt"
 
 if [ -f "/usr/local/bin/docker" ]; then
   DOCKER_PATH="/usr/local/bin/docker"
@@ -17,11 +19,11 @@ clean() {
 
 clean_all() {
 
-tmpfile=$(mktemp)
-tmpout=$(mktemp)
-$DOCKER_PATH images --format '{{.Repository}} {{.Tag}}' > "$tmpfile"
+  tmpfile=$(mktemp)
+  tmpout=$(mktemp)
+  $DOCKER_PATH images --format '{{.Repository}} {{.Tag}}' > "$tmpfile"
 
-TMPFILE="$tmpfile" TMPOUT="$tmpout" python3 - <<EOF
+  TMPFILE="$tmpfile" TMPOUT="$tmpout" python3 - <<EOF
 import sys
 from collections import defaultdict
 import os
@@ -57,13 +59,64 @@ with open("$tmpout", "w") as f:
         print(f"  {outdate}")
         f.write(f"{repo}:{outdate}\n")
 EOF
-echo ""
-echo "Will Delete"
-cat $tmpout | xargs -n 1
-echo ""
-echo ""
-cat $tmpout | xargs -n 1 | xargs -I {} $DOCKER_PATH rmi {}
+  echo ""
+  echo "Will Delete"
+  cat $tmpout | xargs -n 1
+  echo ""
+  echo ""
+  cat $tmpout | xargs -n 1 | xargs -I {} $DOCKER_PATH rmi {}
 
+}
+
+push() {
+  local tag="$2"
+  
+  local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$tag" | head -n1)
+  
+  if [ -z "$image_id" ]; then
+    echo "Could not find image for tag: $tag"
+    return 1
+  fi
+  
+  if [ -f "$DOCKER_PUSH_LOG" ] && grep -q "^$tag,$image_id," "$DOCKER_PUSH_LOG"; then
+    echo "Tag $tag with image ID $image_id already pushed, skipping"
+    return 0
+  fi
+  
+  $DOCKER_PATH "$@"
+  push_succeeds="$?"
+  if [ $push_succeeds -eq 0 ]; then
+    register_push "$tag" "$image_id"
+  else
+    echo "Docker push failed"
+    return 1
+  fi
+}
+
+register_push() {
+  local tag="$1"
+  local image_id="$2"
+  
+  if [ -z "$tag" ]; then
+    echo "No tag provided to register_push"
+    return 1
+  fi
+  
+  if [ -z "$image_id" ]; then
+    echo "No image ID provided to register_push"
+    return 1
+  fi
+  
+  local epoch_time=$(date +%s)  
+  mkdir -p $DOCKER_PUSH_DIR
+  echo "$tag,$image_id,$epoch_time" >> $DOCKER_PUSH_LOG
+  
+  if [ -f "$DOCKER_PUSH_LOG" ]; then
+    local line_count=$(wc -l < "$DOCKER_PUSH_LOG")
+    if [ "$line_count" -gt 300 ]; then
+      tail -n +101 "$DOCKER_PUSH_LOG" > "$DOCKER_PUSH_LOG.tmp" && mv "$DOCKER_PUSH_LOG.tmp" "$DOCKER_PUSH_LOG"
+    fi
+  fi
 }
 
 if [[ "$1" == "clean" && "$2" == "all" ]]; then
@@ -75,10 +128,12 @@ elif [[ "$1" == "clean" ]]; then
   set -e
   clean
   set +e
+elif [[ "$1" == "push" ]]; then
+  push "$@"
 elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "docker clean # Cleans all 'none' tags"
   echo "docker clean all # Cleans all 'none' tags and old versions"
+  echo "docker push # Pushes a tag and image id, skips pushing if already recently pushed"
 else
   $DOCKER_PATH "$@"
 fi
-
