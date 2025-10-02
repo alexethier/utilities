@@ -29,22 +29,56 @@ clean_file() {
     local file="$1"
     local temp_file="${file}.tmp"
 
-    # Check if file has lines with only whitespace
-    if grep -q '^[ \t]\+$' "$file" 2>/dev/null; then
-        print_info "Cleaning empty lines in: $file"
+    # Check if file has whitespace issues using awk without regex
+    local whitespace_issues=$(awk '
+    BEGIN { has_issues = 0 }
+    {
+        line = $0
+        # Check if line has only whitespace
+        if (length(line) > 0) {
+            only_whitespace = 1
+            for (i = 1; i <= length(line); i++) {
+                char = substr(line, i, 1)
+                if (char != " " && char != "\t") {
+                    only_whitespace = 0
+                    break
+                }
+            }
+            # Check if line has trailing whitespace
+            has_trailing = 0
+            if (length(line) > 0) {
+                last_char = substr(line, length(line), 1)
+                if (last_char == " " || last_char == "\t") {
+                    has_trailing = 1
+                }
+            }
+            if (only_whitespace || has_trailing) {
+                has_issues = 1
+            }
+        }
+    }
+    END { print has_issues }
+    ' "$file" 2>/dev/null || echo "0")
+    
+    if [[ $whitespace_issues -gt 0 ]]; then
+        print_info "Cleaning whitespace issues in: $file"
 
-        # Count lines before cleaning
-        local lines_before=$(grep -c '^[ \t]\+$' "$file" 2>/dev/null || echo "0")
-
-        # Use sed to replace lines with only whitespace with completely empty lines
-        sed 's/^[ \t]*$//' "$file" > "$temp_file"
+        # Use awk to safely remove trailing whitespace without regex
+        awk '{
+            # Remove trailing spaces and tabs by iterating from the end
+            line = $0
+            while (length(line) > 0 && (substr(line, length(line), 1) == " " || substr(line, length(line), 1) == "\t")) {
+                line = substr(line, 1, length(line) - 1)
+            }
+            print line
+        }' "$file" > "$temp_file"
 
         # Replace original file with cleaned version
         mv "$temp_file" "$file"
 
-        print_info "  → Fixed $lines_before empty lines with whitespace"
+        print_info "  → Fixed whitespace issues"
     else
-        print_info "No whitespace-only lines found in: $file"
+        print_info "No whitespace issues found in: $file"
     fi
 }
 
@@ -60,8 +94,37 @@ clean_java_files() {
     while IFS= read -r -d '' file; do
         ((file_count++))
 
-        # Check if file has whitespace-only lines
-        if grep -q '^[ \t]\+$' "$file" 2>/dev/null; then
+        # Check if file has whitespace issues using awk without regex
+        whitespace_issues=$(awk '
+        BEGIN { has_issues = 0 }
+        {
+            line = $0
+            if (length(line) > 0) {
+                # Check trailing whitespace
+                last_char = substr(line, length(line), 1)
+                if (last_char == " " || last_char == "\t") {
+                    has_issues = 1
+                    exit
+                }
+                # Check empty lines with whitespace
+                only_whitespace = 1
+                for (i = 1; i <= length(line); i++) {
+                    char = substr(line, i, 1)
+                    if (char != " " && char != "\t") {
+                        only_whitespace = 0
+                        break
+                    }
+                }
+                if (only_whitespace) {
+                    has_issues = 1
+                    exit
+                }
+            }
+        }
+        END { print has_issues }
+        ' "$file" 2>/dev/null || echo "0")
+        
+        if [[ $whitespace_issues -gt 0 ]]; then
             clean_file "$file"
             ((cleaned_count++))
         fi
