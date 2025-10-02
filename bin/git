@@ -59,7 +59,7 @@ pull_branch() {
 dev() {
   TARGET_BRANCH=`git branch --show-current`
   DEV_BRANCH_NAME="dev/ae-$TARGET_BRANCH"
-  $GIT_PATH branch -D $DEV_BRANCH_NAME
+  $GIT_PATH branch -D $DEV_BRANCH_NAME 2>/dev/null
   $GIT_PATH checkout -b $DEV_BRANCH_NAME
   $GIT_PATH push -u origin $DEV_BRANCH_NAME --force
   $GIT_PATH checkout $TARGET_BRANCH
@@ -91,7 +91,7 @@ elif [[ "$1" == "delete" || "$1" == "d" ]]; then
     TARGET_BRANCH="$2"
   fi
 
-  delete $skip_save $TARGET_BRANCH
+  delete $save_branch $TARGET_BRANCH
   set +e
 # Do not override the actual rebase command, do not override if there is a second argument to the rebase command
 elif [[ -z "$2" && "$1" == "rebase" ]]; then
