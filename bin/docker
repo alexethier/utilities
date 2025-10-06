@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# Docker Wrapper Script
+#
+# Wraps the docker binary to add custom commands to ease docker usage.
+#
 # set -x
 
 DOCKER_PATH=""
@@ -251,10 +256,20 @@ elif [[ "$1" == "push" ]]; then
 elif [[ "$1" == "remove" || "$1" == "delete" ]]; then
   remove "$2"
 elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
-  echo "docker clean # Cleans all 'none' tags"
-  echo "docker clean all # Cleans all 'none' tags and old versions"
-  echo "docker push # Pushes a tag and image id, skips pushing if already recently pushed"
-  echo "docker remove|delete <search_string> # Removes all images matching the search string"
+  echo "Docker Wrapper - Custom commands for docker"
+  echo "Using docker binary: $DOCKER_PATH"
+  echo ""
+  echo "Custom Commands:"
+  echo "  clean                      - Remove all untagged images (<none>:<none>)"
+  echo "  clean all                  - Remove untagged images and old versioned images"
+  echo "  push <tag>                 - Push image, skip if already pushed (tracked in ~/.aedev/docker_pushes.txt)"
+  echo "  remove|delete <string>     - Remove images matching name or ID"
+  echo "                               Matches by: exact ID, full repo name, or basename"
+  echo "                               Examples: 'ingress-nginx/controller'"
+  echo ""
+  echo "All other commands are passed through to: $DOCKER_PATH"
+  echo ""
+  echo "Usage: docker [command] [options]"
 else
   $DOCKER_PATH "$@"
 fi
