@@ -265,10 +265,11 @@ remove() {
   local images_to_remove=$(for image_id in $matching_ids; do
     echo "$all_images" | grep "^$image_id " | while read id repo tag; do
       if [ "$repo" != "<none>" ] && [ "$tag" != "<none>" ]; then
+        # Both repo and tag are valid - remove by repo:tag
         echo "TAG:$repo:$tag"
-      elif [ "$repo" != "<none>" ] && [ "$tag" == "<none>" ]; then
-        echo "REPO:$repo"
       else
+        # Either repo or tag is <none>, or both - must remove by ID
+        # (removing by repo name alone defaults to :latest which won't work for <none> tags)
         echo "ID:$id"
       fi
     done
@@ -280,7 +281,7 @@ remove() {
   fi
   
   echo "Images to be removed:"
-  echo "$images_to_remove" | sed 's/^TAG:/  /; s/^REPO:/  /; s/^ID:/  /'
+  echo "$images_to_remove" | sed 's/^TAG:/  /; s/^ID:/  (by ID) /'
   echo ""
   
   # Wait for user confirmation
