@@ -119,6 +119,124 @@ register_push() {
   fi
 }
 
+find_matching_image_ids() {
+  local search_string="$1"
+  local all_images="$2"
+  
+  # Find all matching image IDs
+  # Match on: exact ID, exact full repository name, or if repository ends with search string
+  echo "$all_images" | awk -v search="$search_string" '
+    {
+      id = $1
+      repo = $2
+      
+      # Check if ID matches exactly
+      if (tolower(id) == tolower(search)) {
+        print id
+        next
+      }
+      
+      # Check if full repository name matches exactly
+      if (tolower(repo) == tolower(search)) {
+        print id
+        next
+      }
+      
+      # Check if repository ends with the search string (basename matching)
+      # This handles cases like:
+      # - "openflow-ingress-controller" matches "*/openflow-ingress-controller"
+      # - "ingress-nginx/controller" matches "*/ingress-nginx/controller"
+      search_lower = tolower(search)
+      repo_lower = tolower(repo)
+      
+      # If search contains /, match the suffix after any registry domain
+      # Otherwise, match just the last component after the last /
+      if (index(search, "/") > 0) {
+        # Search has /, so match if repo ends with it
+        if (substr(repo_lower, length(repo_lower) - length(search_lower) + 1) == search_lower) {
+          # Also check that it is preceded by / or is the full string
+          if (length(repo_lower) == length(search_lower) || substr(repo_lower, length(repo_lower) - length(search_lower), 1) == "/") {
+            print id
+          }
+        }
+      } else {
+        # Search has no /, extract basename (last component after /)
+        n = split(repo, parts, "/")
+        basename = parts[n]
+        if (tolower(basename) == search_lower) {
+          print id
+        }
+      }
+    }
+  ' | sort -u
+}
+
+remove() {
+  local search_string="$1"
+  
+  if [ -z "$search_string" ]; then
+    echo "Usage: docker remove <search_string>"
+    echo "Searches for images by name or ID and removes all matching images"
+    return 1
+  fi
+  
+  # Get all images with their ID, Repository, and Tag
+  local all_images=$($DOCKER_PATH images --format '{{.ID}} {{.Repository}} {{.Tag}}')
+  
+  # Find all matching image IDs using the new matching function
+  local matching_ids=$(find_matching_image_ids "$search_string" "$all_images")
+  
+  if [ -z "$matching_ids" ]; then
+    echo "No images found matching: $search_string"
+    return 1
+  fi
+  
+  echo "Found matching image IDs:"
+  echo "$matching_ids"
+  echo ""
+  
+  # Collect all removal specs for each matching ID
+  local images_to_remove=$(for image_id in $matching_ids; do
+    echo "$all_images" | grep "^$image_id " | while read id repo tag; do
+      if [ "$repo" != "<none>" ] && [ "$tag" != "<none>" ]; then
+        echo "TAG:$repo:$tag"
+      elif [ "$repo" != "<none>" ] && [ "$tag" == "<none>" ]; then
+        echo "REPO:$repo"
+      else
+        echo "ID:$id"
+      fi
+    done
+  done)
+  
+  if [ -z "$images_to_remove" ]; then
+    echo "No images to remove"
+    return 0
+  fi
+  
+  echo "Images to be removed:"
+  echo "$images_to_remove" | sed 's/^TAG:/  /; s/^REPO:/  /; s/^ID:/  /'
+  echo ""
+  
+  # Wait for user confirmation
+  read -p "Proceed with removal? (y): " confirmation
+  if [[ ! "$confirmation" =~ ^([yY]|[yY][eE][sS])$ ]]; then
+    echo "Removal cancelled"
+    return 0
+  fi
+  echo ""
+  
+  # Remove all images
+  echo "$images_to_remove" | while read removal_spec; do
+    if [ -n "$removal_spec" ]; then
+      local target="${removal_spec#*:}"
+      $DOCKER_PATH rmi "$target"
+    fi
+  done
+  
+  echo ""
+  echo "Removal complete"
+}
+
 if [[ "$1" == "clean" && "$2" == "all" ]]; then
   set -e
   clean 
@@ -130,10 +248,13 @@ elif [[ "$1" == "clean" ]]; then
   set +e
 elif [[ "$1" == "push" ]]; then
   push "$@"
+elif [[ "$1" == "remove" || "$1" == "delete" ]]; then
+  remove "$2"
 elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "docker clean # Cleans all 'none' tags"
   echo "docker clean all # Cleans all 'none' tags and old versions"
   echo "docker push # Pushes a tag and image id, skips pushing if already recently pushed"
+  echo "docker remove|delete <search_string> # Removes all images matching the search string"
 else
   $DOCKER_PATH "$@"
 fi
