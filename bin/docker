@@ -181,11 +181,14 @@ list() {
   local max_name_length=120
   
   # Get images with custom format (no size)
-  local images_output
-  if [ -z "$search_string" ]; then
-    images_output=$($DOCKER_PATH images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}")
-  else
-    images_output=$($DOCKER_PATH images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}" | grep "$search_string")
+  local images_output=$($DOCKER_PATH images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedSince}}")
+  
+  # Filter by search string if provided (preserve header)
+  if [ -n "$search_string" ]; then
+    images_output=$(echo "$images_output" | awk -v search="$search_string" '
+      NR == 1 { print; next }
+      tolower($0) ~ tolower(search) { print }
+    ')
   fi
   
   # Process and format the output - two pass: first to find max width, second to print
