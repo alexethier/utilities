@@ -69,13 +69,34 @@ print_branch_owners() {
   $GIT_PATH for-each-ref --format='%(refname:short) %(authorname)' refs/remotes/
 }
 
+clean() {
+  local count="$1"
+  
+  if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
+    echo "Usage: git clean <number>"
+    echo "Deletes the specified number of smallest versioned aetmp branches"
+    return 1
+  fi
+  
+  local versions_to_remove=$($GIT_PATH branch | grep -E "aetmp[0-9]+" | cut -d'p' -f2 | sort -V | head -n "$count")
+  
+  if [ -z "$versions_to_remove" ]; then
+    echo "No aetmp branches found"
+    return 0
+  fi
+
+  echo "$versions_to_remove" | sed 's/^/aetmp/' | while read branch_name; do
+    $GIT_PATH branch -D "$branch_name"
+  done
+}
+
 if false; then
   echo "pass"
 elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "Git wrapper is being used and overriding the git help command."
   echo "Run '$GIT_PATH -h' to show git help"
   echo ""
-  echo "Options: save, delete, rebase, rebasem (rebases main)"
+  echo "Options: save, delete, rebase, rebasem (rebases main), clean <number>"
 elif [[ "$1" == "save" ]]; then
   set -e
   save 
@@ -117,6 +138,8 @@ elif [[ "$1" == "owner" || "$1" == "owners" ]]; then
   print_branch_owners
 elif [[ "$1" == "dev" ]]; then
   dev
+elif [[ "$1" == "clean" ]]; then
+  clean "$2"
 else
   # JGit will break if the user
   # sets their gpg format to ssh
