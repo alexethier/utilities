@@ -1,6 +1,8 @@
 #!/bin/bash
 # set -x
 
+set -e
+
 style() {
     # Note: Install (at least package) is needed.
     mvn clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip
