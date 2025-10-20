@@ -9,6 +9,7 @@
 DOCKER_PATH=""
 DOCKER_PUSH_DIR="$HOME/.aedev"
 DOCKER_PUSH_LOG="$DOCKER_PUSH_DIR/docker_pushes.txt"
+DOCKER_PULL_LOG="$DOCKER_PUSH_DIR/docker_pulls.txt"
 
 if [ -f "/usr/local/bin/docker" ]; then
   DOCKER_PATH="/usr/local/bin/docker"
@@ -74,24 +75,24 @@ EOF
 }
 
 push() {
-  local tag="$2"
+  local image_reference="$2"
   
-  local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$tag" | head -n1)
+  local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$image_reference" | head -n1)
   
   if [ -z "$image_id" ]; then
-    echo "Could not find image for tag: $tag"
+    echo "Could not find image for: $image_reference"
     return 1
   fi
   
-  if [ -f "$DOCKER_PUSH_LOG" ] && grep -q "^$tag,$image_id," "$DOCKER_PUSH_LOG"; then
-    echo "Tag $tag with image ID $image_id already pushed, skipping"
+  if [ -f "$DOCKER_PUSH_LOG" ] && grep -q "^$image_reference,$image_id," "$DOCKER_PUSH_LOG"; then
+    echo "Image $image_reference with image ID $image_id already pushed, skipping"
     return 0
   fi
   
   $DOCKER_PATH "$@"
   push_succeeds="$?"
   if [ $push_succeeds -eq 0 ]; then
-    register_push "$tag" "$image_id"
+    register_push "$image_reference" "$image_id"
   else
     echo "Docker push failed"
     return 1
@@ -99,27 +100,65 @@ push() {
 }
 
 register_push() {
-  local tag="$1"
+  local image_reference="$1"
   local image_id="$2"
-  
-  if [ -z "$tag" ]; then
-    echo "No tag provided to register_push"
-    return 1
-  fi
-  
-  if [ -z "$image_id" ]; then
-    echo "No image ID provided to register_push"
-    return 1
-  fi
   
   local epoch_time=$(date +%s)  
   mkdir -p $DOCKER_PUSH_DIR
-  echo "$tag,$image_id,$epoch_time" >> $DOCKER_PUSH_LOG
+  echo "$image_reference,$image_id,$epoch_time" >> $DOCKER_PUSH_LOG
   
   if [ -f "$DOCKER_PUSH_LOG" ]; then
     local line_count=$(wc -l < "$DOCKER_PUSH_LOG")
     if [ "$line_count" -gt 300 ]; then
       tail -n +101 "$DOCKER_PUSH_LOG" > "$DOCKER_PUSH_LOG.tmp" && mv "$DOCKER_PUSH_LOG.tmp" "$DOCKER_PUSH_LOG"
+    fi
+  fi
+}
+
+pull() {
+  local image_reference="$2"
+  local tag="${image_reference##*:}"
+ 
+  # Check the pull log to check if eligible for skipping
+  if [ -f "$DOCKER_PULL_LOG" ] && grep -q "^$image_reference," "$DOCKER_PULL_LOG"; then
+    # Verify the image exists in the local repo
+    local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$image_reference" | head -n1)
+    if [ -n "$image_id" ]; then
+      echo "Image $image_reference with image ID $image_id already pulled, skipping"
+      return 0
+    else
+      echo "Image $image_reference was previously pulled but no longer exists locally, cleaning log entry"
+      grep -v "^$image_reference," "$DOCKER_PULL_LOG" > "$DOCKER_PULL_LOG.tmp" && mv "$DOCKER_PULL_LOG.tmp" "$DOCKER_PULL_LOG"
+    fi
+  fi
+
+  $DOCKER_PATH "$@"
+  local pull_succeeds="$?"
+  
+  if [ $pull_succeeds -eq 0 ]; then
+    # Only register pulls on eligible images (released and versioned images)
+    if [[ -n "$tag" ]] && [[ ! "$image_reference" =~ SNAPSHOT$ ]] && [[ "$tag" != "$image_reference" ]] && [[ "$tag" != "latest" ]]; then
+      local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$image_reference" | head -n1)
+      if [ -n "$image_id" ]; then
+        register_pull "$image_reference"
+      fi
+    fi
+  else
+    return 1
+  fi
+}
+
+register_pull() {
+  local image_reference="$1"
+  
+  local epoch_time=$(date +%s)  
+  mkdir -p $DOCKER_PUSH_DIR
+  echo "$image_reference,$epoch_time" >> $DOCKER_PULL_LOG
+  
+  if [ -f "$DOCKER_PULL_LOG" ]; then
+    local line_count=$(wc -l < "$DOCKER_PULL_LOG")
+    if [ "$line_count" -gt 300 ]; then
+      tail -n +101 "$DOCKER_PULL_LOG" > "$DOCKER_PULL_LOG.tmp" && mv "$DOCKER_PULL_LOG.tmp" "$DOCKER_PULL_LOG"
     fi
   fi
 }
@@ -289,7 +328,7 @@ remove() {
   
   # Wait for user confirmation
   read -p "Proceed with removal? (y): " confirmation
-  if [[ ! "$confirmation" =~ ^([yY]|[yY][eE][sS])$ ]]; then
+  if [[ -n "$confirmation" && ! "$confirmation" =~ ^([yY]|[yY][eE][sS])$ ]]; then
     echo "Removal cancelled"
     return 0
   fi
@@ -318,6 +357,8 @@ elif [[ "$1" == "clean" ]]; then
   set +e
 elif [[ "$1" == "push" ]]; then
   push "$@"
+elif [[ "$1" == "pull" ]]; then
+  pull "$@"
 elif [[ "$1" == "list" ]]; then
   list "$2"
 elif [[ "$1" == "remove" || "$1" == "delete" ]]; then
@@ -330,6 +371,7 @@ elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "  clean                      - Remove all untagged images (<none>:<none>)"
   echo "  clean all                  - Remove untagged images and old versioned images"
   echo "  push <tag>                 - Push image, skip if already pushed (tracked in ~/.aedev/docker_pushes.txt)"
+  echo "  pull <tag>                 - Pull image and register the pull (tracked in ~/.aedev/docker_pulls.txt)"
   echo "  list [string]              - List images, optionally filtered by grep pattern"
   echo "  remove|delete <string>     - Remove images matching name or ID"
   echo "                               Matches by: exact ID, full repo name, or basename"
