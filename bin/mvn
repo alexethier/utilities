@@ -1,20 +1,46 @@
 #!/bin/bash
-# set -x
+
+# Maven Wrapper Script
+# 
+# This script provides convenient Maven build commands with different optimization levels:
+#
+# Usage:
+#   mvn [command] [additional maven args]
+#
+# Commands:
+#   fast    - Fast build with all non-essential plugins disabled (tests, style checks, etc.)
+#   style   - Style-focused build with code quality checks but tests disabled
+#   safe    - Safe build that copies current directory to temp location and runs ./mvnw clean install
+#   [none]  - Passes all arguments directly to the Maven command ($M2_HOME/bin/mvn)
 
 set -e
 
+MVN_COMMAND="$M2_HOME/bin/mvn"
+
 style() {
-    # Note: Install (at least package) is needed.
-    mvn clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip
+    # Note: Install (at least package phase) is needed.
+    $MVN_COMMAND clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip
 }
 fast() {
-    mvn clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
+    $MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
+}
+safe() {
+    current_dir=$(pwd)
+    tmp_dir=$(mktemp -d)    
+    echo "Running in $tmp_dir"
+    # Copy all files excluding target directory
+    tar -C "$current_dir" --exclude='target' -cf - . | tar -C "$tmp_dir" -xf -
+    cd "$tmp_dir"    
+    ./mvnw clean install    
+    cd "$current_dir"
 }
 
 if [[ "$1" == "fast" ]]; then
     fast
 elif [[ "$1" == "style" ]]; then
     style
+elif [[ "$1" == "safe" ]]; then
+    safe
 else
-    $M2_HOME/bin/mvn "$@"
+    $MVN_COMMAND "$@"
 fi
