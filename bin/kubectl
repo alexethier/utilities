@@ -2,9 +2,6 @@
 
 # Drop-in replacement for kubectl with automatic namespace discovery and pattern matching.
 # Usage: kfind <command> <kind> [pattern_or_flags]
-# Commands: search, describe, get, logs
-# TODO: implement exec
-# TODO: fix logs
 # TODO: implement delete
 
 set -e
@@ -33,24 +30,28 @@ show_help() {
     cat << EOF
 Kubernetes Object Search and Operations Tool
 
-Usage: kfind <command> <kind> <object_name_pattern>
+Usage: kubectl <command> [kind] [pattern_or_flags]
 
 Commands:
     search <kind> <pattern>     - Search for objects of specified kind matching the pattern
     describe <kind> <pattern>   - Describe objects of specified kind matching the pattern
     get <kind> <pattern>        - Get YAML for objects of specified kind matching the pattern
     logs <pattern>              - Show logs for pods matching the pattern (kind is always 'pods')
+    exec [flags] <pod> [--] <command> - Execute command in pods (supports kubectl exec flags like -it)
 
 Options:
     -v, --verbose              - Enable verbose mode (shows commands being executed)
     -h, --help                 - Show this help
 
 Examples:
-    kfind search pods data-plane-agent
-    kfind describe deployments data-plane-agent-deployment-5dc4f6bcdd-5mr9q
-    kfind get secrets data-plane-agent
-    kfind logs data-plane-agent
-    kfind -v describe pods my-pod
+    kubectl search pods data-plane-agent
+    kubectl describe pods keycloak-0
+    kubectl get deployments my-app
+    kubectl logs data-plane-agent
+    kubectl exec -it keycloak-0 -- /bin/bash
+    kubectl exec keycloak-0 -- ls -la
+    kubectl -v describe pods my-pod
+    kubectl get pods -A
 
 EOF
 }
@@ -133,7 +134,64 @@ logs() {
     if [ -n "$result" ]; then
         local namespace=$(echo "$result" | awk '{print $1}')
         local name=$(echo "$result" | awk '{print $2}')
-        $KUBECTL_CMD logs "$kind" "$name" -n "$namespace" "$@"
+        $KUBECTL_CMD logs "$name" -n "$namespace" "$@"
+    fi
+}
+
+# Exec function
+exec() {
+    # exec always works with pods, no need for kind parameter
+    
+    # Parse arguments to find pod name and flags
+    local flags=()
+    local pod_name=""
+    local command_args=()
+    local found_pod=false
+    
+    # Parse all arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --)
+                # Everything after -- goes to command
+                shift
+                command_args+=("$@")
+                break
+                ;;
+            -*)
+                # This is a flag, keep it
+                flags+=("$1")
+                shift
+                ;;
+            *)
+                # This could be the pod name or part of command
+                if [[ "$found_pod" == "false" ]]; then
+                    pod_name="$1"
+                    found_pod=true
+                else
+                    # This is part of the command
+                    command_args+=("$1")
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    if [[ -z "$pod_name" ]]; then
+        echo "Error: No pod name provided" >&2
+        return 1
+    fi
+    
+    # Find namespace and name using find_namespace (always use pods)
+    local result=$(find_namespace "pods" "$pod_name")
+    
+    if [ -n "$result" ]; then
+        local namespace=$(echo "$result" | awk '{print $1}')
+        local name=$(echo "$result" | awk '{print $2}')
+        
+        $KUBECTL_CMD exec "${flags[@]}" "$name" -n "$namespace" -- "${command_args[@]}"
+    else
+        echo "Error: Pod '$pod_name' not found" >&2
+        return 1
     fi
 }
 
@@ -142,6 +200,7 @@ main() {
     local command=""
     local kind=""
     local pattern=""
+    local skip_direct_execution=false
     
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -177,6 +236,14 @@ main() {
                 # Remaining args are passed to the command function
                 break
                 ;;
+            exec)
+                command="$1"
+                kind="pods"
+                skip_direct_execution=true
+                shift 1  # Remove command, keep all remaining args for exec function
+                # Remaining args are passed to the command function
+                break
+                ;;
             *)
                 echo "Unknown option: $1"
                 show_help
@@ -197,14 +264,13 @@ main() {
         show_help
         exit 1
     fi
-    
-    # If no pattern provided or pattern starts with -, run kubectl command directly
-    if [ -z "$pattern" ] || [[ "$pattern" =~ ^- ]]; then
+
+    # Handle commands like kubectl get pods -A
+    if [[ "$skip_direct_execution" == "false" ]] && ([ -z "$pattern" ] || [[ "$pattern" =~ ^- ]]); then
         # If pattern is a flag, add it back to the arguments
         if [[ "$pattern" =~ ^- ]]; then
             set -- "$pattern" "$@"
         fi
-        echo "Running kubectl command: $KUBECTL_CMD $command $kind $@"
         $KUBECTL_CMD "$command" "$kind" "$@"
         exit 0
     fi
@@ -222,6 +288,9 @@ main() {
             ;;
         logs)
             logs "$kind" "$pattern" "$@"
+            ;;
+        exec)
+            exec "$@"
             ;;
         *)
             echo "Unknown command: $command"
