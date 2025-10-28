@@ -4,6 +4,25 @@
 # It uses git-ls and md5 hashes to find if any source files changed.
 # The checksum file is stored in the node_modules directory.
 
+# Generic function to get original command path (bypassing wrapper scripts)
+get_original_command() {
+    local cmd="$1"
+    if [ -z "$cmd" ]; then
+        echo "Error: command name required" >&2
+        return 1
+    fi
+    
+    local original_path="$PATH"
+    local script_dir=$(dirname "$0")
+    PATH=$(echo "$PATH" | sed "s|:$script_dir||g" | sed "s|^$script_dir:||g")
+    local cmd_path=$(command -v "$cmd")
+    PATH="$original_path"
+    echo "$cmd_path"
+}
+
+# Get the original yarn command
+YARN_PATH=$(get_original_command "yarn")
+
 ARGS=()
 VERBOSE=false
 FORCE=false
@@ -58,7 +77,7 @@ done
 YARN_COMMAND="${ARGS[0]}"
 YARN_COMMAND_HASH=`echo ${YARN_COMMAND} | md5sum | cut -d' ' -f1`
 CHECKSUM_FILE_PATH="./node_modules/yarn.${YARN_COMMAND_HASH}.checksum"
-YARN_FULL_COMMAND="/opt/node/bin/yarn ${ARGS[*]}"
+YARN_FULL_COMMAND="$YARN_PATH ${ARGS[*]}"
 if [[ -f "$CHECKSUM_FILE_PATH" ]]; then
     OLD_CHECKSUM=`cat $CHECKSUM_FILE_PATH`
     NEW_CHECKSUM=`git ls-files | sort | xargs -I {} cat {} | md5sum | cut -d' ' -f1`

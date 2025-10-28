@@ -15,7 +15,24 @@
 
 set -e
 
-MVN_COMMAND="$M2_HOME/bin/mvn"
+# Generic function to get original command path (bypassing wrapper scripts)
+get_original_command() {
+    local cmd="$1"
+    if [ -z "$cmd" ]; then
+        echo "Error: command name required" >&2
+        return 1
+    fi
+    
+    local original_path="$PATH"
+    local script_dir=$(dirname "$0")
+    PATH=$(echo "$PATH" | sed "s|:$script_dir||g" | sed "s|^$script_dir:||g")
+    local cmd_path=$(command -v "$cmd")
+    PATH="$original_path"
+    echo "$cmd_path"
+}
+
+# Get the original mvn command
+MVN_COMMAND=$(get_original_command "mvn")
 
 style() {
     # Note: Install (at least package phase) is needed.

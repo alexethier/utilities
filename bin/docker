@@ -6,18 +6,27 @@
 #
 # set -x
 
-DOCKER_PATH=""
+# Generic function to get original command path (bypassing wrapper scripts)
+get_original_command() {
+    local cmd="$1"
+    if [ -z "$cmd" ]; then
+        echo "Error: command name required" >&2
+        return 1
+    fi
+    
+    local original_path="$PATH"
+    local script_dir=$(dirname "$0")
+    PATH=$(echo "$PATH" | sed "s|:$script_dir||g" | sed "s|^$script_dir:||g")
+    local cmd_path=$(command -v "$cmd")
+    PATH="$original_path"
+    echo "$cmd_path"
+}
+
+# Get the original docker command
+DOCKER_PATH=$(get_original_command "docker")
 DOCKER_PUSH_DIR="$HOME/.aedev"
 DOCKER_PUSH_LOG="$DOCKER_PUSH_DIR/docker_pushes.txt"
 DOCKER_PULL_LOG="$DOCKER_PUSH_DIR/docker_pulls.txt"
-
-if [ -f "/usr/local/bin/docker" ]; then
-  DOCKER_PATH="/usr/local/bin/docker"
-fi
-if [ -z "$DOCKER_PATH" ]; then
-  echo "Could not find docker installation location."
-  exit 1
-fi
 
 clean() {
   $DOCKER_PATH images  | tr -s ' '  | grep "<none> <none>" | cut -d' ' -f3  | xargs -I {} $DOCKER_PATH rmi {} 
