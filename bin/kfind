@@ -1,0 +1,216 @@
+#!/bin/bash
+
+# Drop-in replacement for kubectl with automatic namespace discovery and pattern matching.
+# Usage: kfind <command> <kind> [pattern_or_flags]
+# Commands: search, describe, get, logs
+
+set -e
+
+# Default kubectl command
+KUBECTL_CMD=${KUBECTL_CMD:-kubectl}
+
+# Help function
+show_help() {
+    cat << EOF
+Kubernetes Object Search and Operations Tool
+
+Usage: kfind <command> <kind> <object_name_pattern>
+
+Commands:
+    search <kind> <pattern>     - Search for objects of specified kind matching the pattern
+    describe <kind> <pattern>   - Describe objects of specified kind matching the pattern
+    get <kind> <pattern>        - Get YAML for objects of specified kind matching the pattern
+    logs <pattern>              - Show logs for pods matching the pattern (kind is always 'pods')
+
+Options:
+    -v, --verbose              - Enable verbose mode (shows commands being executed)
+    -h, --help                 - Show this help
+
+Examples:
+    kfind search pods data-plane-agent
+    kfind describe deployments data-plane-agent-deployment-5dc4f6bcdd-5mr9q
+    kfind get secrets data-plane-agent
+    kfind logs data-plane-agent
+    kfind -v describe pods my-pod
+
+EOF
+}
+
+# Private function to find namespace and name of objects matching pattern
+find_namespace() {
+    local kind="$1"
+    local pattern="$2"
+    
+    local result=$($KUBECTL_CMD get "$kind" --all-namespaces | grep -i "$pattern" 2>/dev/null | head -n1 | awk '{print $1 " " $2}')
+    
+    if [ -n "$result" ]; then
+        echo "$result"
+    fi
+}
+
+# Search function - finds objects matching pattern
+search() {
+    local kind="$1"
+    local pattern="$2"
+    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+    
+    # Find namespace and name using find_namespace
+    local result=$(find_namespace "$kind" "$pattern")
+    
+    if [ -n "$result" ]; then
+        local namespace=$(echo "$result" | awk '{print $1}')
+        local name=$(echo "$result" | awk '{print $2}')
+        echo "$namespace $name"
+    fi
+}
+
+# Describe function
+describe() {
+    local kind="$1"
+    local pattern="$2"
+    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+    
+    # Find namespace and name using find_namespace
+    local result=$(find_namespace "$kind" "$pattern")
+    
+    if [ -n "$result" ]; then
+        local namespace=$(echo "$result" | awk '{print $1}')
+        local name=$(echo "$result" | awk '{print $2}')
+        $KUBECTL_CMD describe "$kind" "$name" -n "$namespace" "$@"
+    fi
+}
+
+# Get YAML function
+get_yaml() {
+    local kind="$1"
+    local pattern="$2"
+    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+    
+    # Find namespace and name using find_namespace
+    local result=$(find_namespace "$kind" "$pattern")
+    
+    if [ -n "$result" ]; then
+        local namespace=$(echo "$result" | awk '{print $1}')
+        local name=$(echo "$result" | awk '{print $2}')
+        $KUBECTL_CMD get "$kind" "$name" -n "$namespace" -o yaml "$@"
+    fi
+}
+
+# Logs function
+logs() {
+    local kind="$1"
+    local pattern="$2"
+    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+    
+    # Find objects (only works for pods)
+    if [ "$kind" != "pods" ]; then
+        echo "Error: logs command only works with pods" >&2
+        return 1
+    fi
+    
+    # Find namespace and name using find_namespace
+    local result=$(find_namespace "$kind" "$pattern")
+    
+    if [ -n "$result" ]; then
+        local namespace=$(echo "$result" | awk '{print $1}')
+        local name=$(echo "$result" | awk '{print $2}')
+        $KUBECTL_CMD logs "$kind" "$name" -n "$namespace" "$@"
+    fi
+}
+
+# Main argument parsing
+main() {
+    local command=""
+    local kind=""
+    local pattern=""
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--verbose)
+                set -x
+                shift
+                ;;
+            search|describe|get)
+                command="$1"
+                kind="$2"
+                pattern="$3"
+                # Shift only the arguments that exist
+                if [ $# -ge 3 ]; then
+                    shift 3
+                elif [ $# -ge 2 ]; then
+                    shift 2
+                else
+                    shift
+                fi
+                # Remaining args are passed to the command function
+                break
+                ;;
+            logs)
+                command="$1"
+                kind="pods"
+                pattern="$2"
+                shift 2
+                # Remaining args are passed to the command function
+                break
+                ;;
+            *)
+                echo "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Validate command, kind, and pattern
+    if [ -z "$command" ]; then
+        echo "Error: Command is required"
+        show_help
+        exit 1
+    fi
+    
+    if [ -z "$kind" ]; then
+        echo "Error: Kind is required"
+        show_help
+        exit 1
+    fi
+    
+    # If no pattern provided or pattern starts with -, run kubectl command directly
+    if [ -z "$pattern" ] || [[ "$pattern" =~ ^- ]]; then
+        # If pattern is a flag, add it back to the arguments
+        if [[ "$pattern" =~ ^- ]]; then
+            set -- "$pattern" "$@"
+        fi
+        echo "Running kubectl command: $KUBECTL_CMD $command $kind $@"
+        $KUBECTL_CMD "$command" "$kind" "$@"
+        exit 0
+    fi
+    
+    # Execute command
+    case $command in
+        search)
+            search "$kind" "$pattern" "$@"
+            ;;
+        describe)
+            describe "$kind" "$pattern" "$@"
+            ;;
+        get)
+            get_yaml "$kind" "$pattern" "$@"
+            ;;
+        logs)
+            logs "$kind" "$pattern" "$@"
+            ;;
+        *)
+            echo "Unknown command: $command"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Run main function with all arguments
+main "$@"
