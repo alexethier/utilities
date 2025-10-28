@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Drop-in replacement for kubectl with automatic namespace discovery and pattern matching.
-# Usage: kfind <command> <kind> [pattern_or_flags]
-# TODO: implement delete
+# Usage: kubectl <command> [kind] [pattern_or_flags]
+# Commands: search, describe, get, logs, exec, delete, connect
 
 set -e
 
@@ -38,6 +38,8 @@ Commands:
     get <kind> <pattern>        - Get YAML for objects of specified kind matching the pattern
     logs <pattern>              - Show logs for pods matching the pattern (kind is always 'pods')
     exec [flags] <pod> [--] <command> - Execute command in pods (supports kubectl exec flags like -it)
+    delete <kind> <pattern>     - Delete objects of specified kind matching the pattern
+    connect <pattern> [shell]   - Connect to pod with shell (default: /bin/bash, options: sh, bash)
 
 Options:
     -v, --verbose              - Enable verbose mode (shows commands being executed)
@@ -50,6 +52,9 @@ Examples:
     kubectl logs data-plane-agent
     kubectl exec -it keycloak-0 -- /bin/bash
     kubectl exec keycloak-0 -- ls -la
+    kubectl connect keycloak-0
+    kubectl connect keycloak-0 sh
+    kubectl delete pods old-pod
     kubectl -v describe pods my-pod
     kubectl get pods -A
 
@@ -84,11 +89,12 @@ search() {
     fi
 }
 
-# Describe function
-describe() {
-    local kind="$1"
-    local pattern="$2"
-    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+# Generic function to run kubectl commands with namespace discovery
+kubectl_wrapper_command() {
+    local kubectl_cmd="$1"
+    local kind="$2"
+    local pattern="$3"
+    shift 3  # Remove kubectl_cmd, kind, and pattern, leaving additional args in "$@"
     
     # Find namespace and name using find_namespace
     local result=$(find_namespace "$kind" "$pattern")
@@ -96,7 +102,7 @@ describe() {
     if [ -n "$result" ]; then
         local namespace=$(echo "$result" | awk '{print $1}')
         local name=$(echo "$result" | awk '{print $2}')
-        $KUBECTL_CMD describe "$kind" "$name" -n "$namespace" "$@"
+        $KUBECTL_CMD "$kubectl_cmd" "$kind" "$name" -n "$namespace" "$@"
     fi
 }
 
@@ -105,15 +111,7 @@ get_yaml() {
     local kind="$1"
     local pattern="$2"
     shift 2  # Remove kind and pattern, leaving additional args in "$@"
-    
-    # Find namespace and name using find_namespace
-    local result=$(find_namespace "$kind" "$pattern")
-    
-    if [ -n "$result" ]; then
-        local namespace=$(echo "$result" | awk '{print $1}')
-        local name=$(echo "$result" | awk '{print $2}')
-        $KUBECTL_CMD get "$kind" "$name" -n "$namespace" -o yaml "$@"
-    fi
+    kubectl_wrapper_command "get" "$kind" "$pattern" -o yaml "$@"
 }
 
 # Logs function
@@ -195,6 +193,24 @@ exec() {
     fi
 }
 
+# Connect function - shortcut for exec with shell
+connect() {
+    local pattern="$1"
+    local shell="$2"
+    
+    # Default to bash if no shell specified
+    if [ -z "$shell" ]; then
+        shell="/bin/bash"
+    elif [ "$shell" = "sh" ]; then
+        shell="/bin/sh"
+    elif [ "$shell" = "bash" ]; then
+        shell="/bin/bash"
+    fi
+    
+    # Use exec function with -it flags and the specified shell
+    exec "-it" "$pattern" "--" "$shell"
+}
+
 # Main argument parsing
 main() {
     local command=""
@@ -213,7 +229,7 @@ main() {
                 set -x
                 shift
                 ;;
-            search|describe|get)
+            search|describe|get|delete)
                 command="$1"
                 kind="$2"
                 pattern="$3"
@@ -241,6 +257,14 @@ main() {
                 kind="pods"
                 skip_direct_execution=true
                 shift 1  # Remove command, keep all remaining args for exec function
+                # Remaining args are passed to the command function
+                break
+                ;;
+            connect)
+                command="$1"
+                kind="pods"
+                skip_direct_execution=true
+                shift 1  # Remove command, keep all remaining args for connect function
                 # Remaining args are passed to the command function
                 break
                 ;;
@@ -281,16 +305,22 @@ main() {
             search "$kind" "$pattern" "$@"
             ;;
         describe)
-            describe "$kind" "$pattern" "$@"
+            kubectl_wrapper_command "describe" "$kind" "$pattern" "$@"
             ;;
         get)
             get_yaml "$kind" "$pattern" "$@"
+            ;;
+        delete)
+            kubectl_wrapper_command "delete" "$kind" "$pattern" "$@"
             ;;
         logs)
             logs "$kind" "$pattern" "$@"
             ;;
         exec)
             exec "$@"
+            ;;
+        connect)
+            connect "$1" "$2"
             ;;
         *)
             echo "Unknown command: $command"
