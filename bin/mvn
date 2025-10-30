@@ -42,6 +42,13 @@ fast() {
     $MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
 }
 safe() {
+    # Check if pom.xml exists in current directory
+    if [ ! -f "pom.xml" ]; then
+        echo "Error: pom.xml not found in current directory" >&2
+        echo "mvn safe command must be run from a Maven project root directory" >&2
+        exit 1
+    fi
+    
     current_dir=$(pwd)
     tmp_dir=$(mktemp -d)    
     echo "Running in $tmp_dir"
