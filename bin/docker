@@ -1,10 +1,11 @@
 #!/bin/bash
 #
-# Docker Wrapper Script
+# Tired of waiting for slow docker push/pull commands when you already ran it?
+# This script automatically cashes previous push/pull commands and will skip them if they are unnecessary.
 #
 # Wraps the docker binary to add custom commands to ease docker usage.
-#
-# set -x
+
+set -e
 
 # Generic function to get original command path (bypassing wrapper scripts)
 get_original_command() {

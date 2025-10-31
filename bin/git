@@ -1,5 +1,6 @@
 #!/bin/bash
-# set -x
+
+set -e
 
 # Generic function to get original command path (bypassing wrapper scripts)
 get_original_command() {

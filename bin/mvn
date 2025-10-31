@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#
 # Maven Wrapper Script
 # 
 # This script provides convenient Maven build commands with different optimization levels:
@@ -34,6 +34,36 @@ get_original_command() {
 # Get the original mvn command
 MVN_COMMAND=$(get_original_command "mvn")
 
+# Help function
+show_help() {
+    cat << EOF
+Maven Wrapper Script
+
+This script provides convenient Maven build commands with different optimization levels.
+
+Commands:
+    fast                    - Fast build with all non-essential plugins disabled
+                              (tests, style checks, spotbugs, pmd, enforcer, rat, javadoc)
+    style                   - Style-focused build with code quality checks but tests disabled
+                              (runs checkstyle, spotbugs, pmd but skips tests and javadoc)
+    safe                    - Safe build that copies current directory to temp location
+                              and runs a full build ./mvnw clean install (requires pom.xml and mvnw)
+    help, -h, --help        - Show this help message
+    [none]                  - Passes all arguments directly to Maven
+
+Options:
+    All standard Maven options are supported when using direct Maven commands.
+
+Examples:
+    mvn fast                - Run fast build
+    mvn style               - Run style-focused build
+    mvn safe                - Run safe build in temporary directory
+    mvn clean install       - Pass through to Maven directly
+    mvn -DskipTests install - Pass through to Maven directly
+
+EOF
+}
+
 style() {
     # Note: Install (at least package phase) is needed.
     $MVN_COMMAND clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip
@@ -65,6 +95,8 @@ elif [[ "$1" == "style" ]]; then
     style
 elif [[ "$1" == "safe" ]]; then
     safe
+elif [[ "$1" == "help" ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+    show_help
 else
     $MVN_COMMAND "$@"
 fi
