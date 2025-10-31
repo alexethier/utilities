@@ -1,6 +1,9 @@
 #!/bin/bash
 
-# Drop-in replacement for kubectl with automatic namespace discovery and pattern matching.
+# Tired of always having to specify the namespace (-n) flag for every command, worry no more!
+# This is a drop-in replacement for kubectl with automatic namespace discovery and pattern matching.
+# When using kubectl in dev, specifying the namespace is often unnecessary because the resource name is unique within the cluster
+# This script searches for and finds the namespace for an entity if no namespace is supplied.
 # Usage: kubectl <command> [kind] [pattern_or_flags]
 # Commands: search, describe, get, logs, exec, delete, connect
 
@@ -28,22 +31,22 @@ KUBECTL_CMD=$(get_original_command "kubectl")
 # Help function
 show_help() {
     cat << EOF
-Kubernetes Object Search and Operations Tool
+Drop-in replacement for kubectl with automatic namespace discovery and pattern matching.
+Regular kubectl commands work as-is. If a namespace flag (-n/--namespace) is provided, 
+commands pass through directly to kubectl. Otherwise, namespace is automatically discovered.
 
-Usage: kubectl <command> [kind] [pattern_or_flags]
-
-Commands:
-    search <kind> <pattern>     - Search for objects of specified kind matching the pattern
-    describe <kind> <pattern>   - Describe objects of specified kind matching the pattern
-    get <kind> <pattern>        - Get YAML for objects of specified kind matching the pattern
-    logs <pattern>              - Show logs for pods matching the pattern (kind is always 'pods')
-    exec [flags] <pod> [--] <command> - Execute command in pods (supports kubectl exec flags like -it)
-    delete <kind> <pattern>     - Delete objects of specified kind matching the pattern
-    connect <pattern> [shell]   - Connect to pod with shell (default: /bin/bash, options: sh, bash)
+Enhanced Commands:
+    search <kind> <pattern>              - Search for objects matching the pattern
+    describe <kind> <pattern>            - Describe objects matching the pattern
+    get <kind> <pattern>                 - Get YAML for objects matching the pattern
+    logs <pattern>                       - Show logs for pods matching the pattern
+    exec [flags] <pod> [--] <command>    - Execute command in pod (supports kubectl exec flags)
+    delete <kind> <pattern>               - Delete objects matching the pattern
+    connect <pattern> [shell]            - Connect to pod with shell (default: /bin/bash)
 
 Options:
-    -v, --verbose              - Enable verbose mode (shows commands being executed)
-    -h, --help                 - Show this help
+    -v, --verbose                        - Enable verbose mode
+    -h, --help                           - Show this help
 
 Examples:
     kubectl search pods data-plane-agent
@@ -51,14 +54,22 @@ Examples:
     kubectl get deployments my-app
     kubectl logs data-plane-agent
     kubectl exec -it keycloak-0 -- /bin/bash
-    kubectl exec keycloak-0 -- ls -la
     kubectl connect keycloak-0
-    kubectl connect keycloak-0 sh
     kubectl delete pods old-pod
-    kubectl -v describe pods my-pod
-    kubectl get pods -A
+    kubectl get pods -A                  - Passes through to kubectl (flag as pattern)
+    kubectl get pods keycloak-0 -n keycloak  - Passes through to kubectl (namespace flag provided)
 
 EOF
+}
+
+# Check if namespace flag is present in arguments
+has_namespace_flag() {
+    for arg in "$@"; do
+        if [[ "$arg" == "-n" ]] || [[ "$arg" == "--namespace" ]]; then
+            return 0  # true
+        fi
+    done
+    return 1  # false
 }
 
 # Private function to find namespace and name of objects matching pattern
@@ -66,10 +77,27 @@ find_namespace() {
     local kind="$1"
     local pattern="$2"
     
-    local result=$($KUBECTL_CMD get "$kind" --all-namespaces | grep -i "$pattern" 2>/dev/null | head -n1 | awk '{print $1 " " $2}')
+    # Get all matching results
+    local all_matches=$($KUBECTL_CMD get "$kind" --all-namespaces | grep -i "$pattern" 2>/dev/null | awk '{print $1 " " $2}')
     
-    if [ -n "$result" ]; then
-        echo "$result"
+    # Count matches
+    local match_count=$(echo "$all_matches" | grep -v '^$' | wc -l | tr -d ' ')
+    
+    if [ "$match_count" -eq 1 ]; then
+        # Exactly one match - return it
+        echo "$all_matches"
+    else
+        # Error case: no matches or multiple matches
+        if [ "$match_count" -eq 0 ]; then
+            echo "Error: No $kind found matching pattern '$pattern'" >&2
+        else
+            echo "Error: Multiple $kind found matching pattern '$pattern':" >&2
+            echo "$all_matches" | head -n 3 | sed 's/^/  /' >&2
+            if [ "$match_count" -gt 3 ]; then
+                echo "  ..." >&2
+            fi
+        fi
+        return 1
     fi
 }
 
@@ -77,16 +105,17 @@ find_namespace() {
 search() {
     local kind="$1"
     local pattern="$2"
-    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+    shift 2
     
-    # Find namespace and name using find_namespace
-    local result=$(find_namespace "$kind" "$pattern")
+    local namespace_record=$(find_namespace "$kind" "$pattern")
     
-    if [ -n "$result" ]; then
-        local namespace=$(echo "$result" | awk '{print $1}')
-        local name=$(echo "$result" | awk '{print $2}')
-        echo "$namespace $name"
+    if [ -z "$namespace_record" ]; then
+        return 1
     fi
+    
+    local namespace=$(echo "$namespace_record" | awk '{print $1}')
+    local name=$(echo "$namespace_record" | awk '{print $2}')
+    echo "$namespace $name"
 }
 
 # Generic function to run kubectl commands with namespace discovery
@@ -94,23 +123,24 @@ kubectl_wrapper_command() {
     local kubectl_cmd="$1"
     local kind="$2"
     local pattern="$3"
-    shift 3  # Remove kubectl_cmd, kind, and pattern, leaving additional args in "$@"
+    shift 3
     
-    # Find namespace and name using find_namespace
-    local result=$(find_namespace "$kind" "$pattern")
+    local namespace_record=$(find_namespace "$kind" "$pattern")
     
-    if [ -n "$result" ]; then
-        local namespace=$(echo "$result" | awk '{print $1}')
-        local name=$(echo "$result" | awk '{print $2}')
-        $KUBECTL_CMD "$kubectl_cmd" "$kind" "$name" -n "$namespace" "$@"
+    if [ -z "$namespace_record" ]; then
+        return 1
     fi
+    
+    local namespace=$(echo "$namespace_record" | awk '{print $1}')
+    local name=$(echo "$namespace_record" | awk '{print $2}')
+    $KUBECTL_CMD "$kubectl_cmd" "$kind" "$name" -n "$namespace" "$@"
 }
 
 # Get YAML function
 get_yaml() {
     local kind="$1"
     local pattern="$2"
-    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+    shift 2
     kubectl_wrapper_command "get" "$kind" "$pattern" -o yaml "$@"
 }
 
@@ -118,55 +148,61 @@ get_yaml() {
 logs() {
     local kind="$1"
     local pattern="$2"
-    shift 2  # Remove kind and pattern, leaving additional args in "$@"
+    shift 2
     
-    # Find objects (only works for pods)
     if [ "$kind" != "pods" ]; then
         echo "Error: logs command only works with pods" >&2
         return 1
     fi
     
-    # Find namespace and name using find_namespace
-    local result=$(find_namespace "$kind" "$pattern")
+    local namespace_record=$(find_namespace "$kind" "$pattern")
     
-    if [ -n "$result" ]; then
-        local namespace=$(echo "$result" | awk '{print $1}')
-        local name=$(echo "$result" | awk '{print $2}')
-        $KUBECTL_CMD logs "$name" -n "$namespace" "$@"
+    if [ -z "$namespace_record" ]; then
+        return 1
     fi
+    
+    local namespace=$(echo "$namespace_record" | awk '{print $1}')
+    local name=$(echo "$namespace_record" | awk '{print $2}')
+    $KUBECTL_CMD logs "$name" -n "$namespace" "$@"
 }
 
 # Exec function
 exec() {
     # exec always works with pods, no need for kind parameter
     
-    # Parse arguments to find pod name and flags
+    # Parse arguments to extract:
+    # - Flags: kubectl exec flags (e.g., -it, -c) that should be passed through
+    # - Pod name: first non-flag argument before -- separator
+    # - Command separator: -- marks the start of the command to execute
+    # - Command args: all arguments after -- that form the command
+    # Then find namespace automatically using the pod name
     local flags=()
     local pod_name=""
     local command_args=()
     local found_pod=false
-    
-    # Parse all arguments
+    local found_separator=false
     while [[ $# -gt 0 ]]; do
         case $1 in
             --)
                 # Everything after -- goes to command
+                found_separator=true
                 shift
                 command_args+=("$@")
                 break
                 ;;
             -*)
-                # This is a flag, keep it
+                # Any flag (e.g., -it, -c) - preserve it to pass to kubectl exec
                 flags+=("$1")
                 shift
                 ;;
             *)
-                # This could be the pod name or part of command
-                if [[ "$found_pod" == "false" ]]; then
+                # Non-flag argument: could be pod name (first one before --) or command arg (after -- or after pod)
+                if [[ "$found_pod" == "false" ]] && [[ "$found_separator" == "false" ]]; then
+                    # First non-flag argument before -- is the pod name/pattern
                     pod_name="$1"
                     found_pod=true
                 else
-                    # This is part of the command
+                    # This is part of the command to execute in the pod
                     command_args+=("$1")
                 fi
                 shift
@@ -179,18 +215,17 @@ exec() {
         return 1
     fi
     
-    # Find namespace and name using find_namespace (always use pods)
-    local result=$(find_namespace "pods" "$pod_name")
+    local namespace_record=$(find_namespace "pods" "$pod_name")
     
-    if [ -n "$result" ]; then
-        local namespace=$(echo "$result" | awk '{print $1}')
-        local name=$(echo "$result" | awk '{print $2}')
-        
-        $KUBECTL_CMD exec "${flags[@]}" "$name" -n "$namespace" -- "${command_args[@]}"
-    else
-        echo "Error: Pod '$pod_name' not found" >&2
+    if [ -z "$namespace_record" ]; then
         return 1
     fi
+    
+    local namespace=$(echo "$namespace_record" | awk '{print $1}')
+    local name=$(echo "$namespace_record" | awk '{print $2}')
+    
+    # kubectl exec syntax: kubectl exec [flags] POD -n NAMESPACE -- COMMAND [args...]
+    $KUBECTL_CMD exec "${flags[@]}" "$name" -n "$namespace" -- "${command_args[@]}"
 }
 
 # Connect function - shortcut for exec with shell
@@ -213,6 +248,12 @@ connect() {
 
 # Main argument parsing
 main() {
+    # If namespace is provided anywhere in arguments, pass through directly to original kubectl
+    if has_namespace_flag "$@"; then
+        $KUBECTL_CMD "$@"
+        return
+    fi
+    
     local command=""
     local kind=""
     local pattern=""
@@ -269,9 +310,8 @@ main() {
                 break
                 ;;
             *)
-                echo "Unknown option: $1"
-                show_help
-                exit 1
+                $KUBECTL_CMD $@
+                exit 0
                 ;;
         esac
     done
