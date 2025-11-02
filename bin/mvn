@@ -65,6 +65,12 @@ EOF
 }
 
 style() {
+    # Check if JAVA_STYLE_FIX_SCRIPT_PATH is set and invoke it before running Maven
+    if [ -n "$JAVA_STYLE_FIX_SCRIPT_PATH" ]; then
+        echo "Running Java style fix script: $JAVA_STYLE_FIX_SCRIPT_PATH"
+        "$JAVA_STYLE_FIX_SCRIPT_PATH"
+    fi
+
     # Note: Install (at least package phase) is needed.
     $MVN_COMMAND clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip
 }
