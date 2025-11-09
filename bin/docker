@@ -29,6 +29,13 @@ DOCKER_PUSH_DIR="$HOME/.aedev"
 DOCKER_PUSH_LOG="$DOCKER_PUSH_DIR/docker_pushes.txt"
 DOCKER_PULL_LOG="$DOCKER_PUSH_DIR/docker_pulls.txt"
 
+# Normalize image reference by removing docker.io prefix (Docker's default registry)
+normalize_image_reference() {
+  local image_ref="$1"
+  # Remove docker.io/ prefix if present (case insensitive)
+  echo "$image_ref" | sed 's|^[Dd][Oo][Cc][Kk][Ee][Rr]\.[Ii][Oo]/||'
+}
+
 clean() {
   $DOCKER_PATH images  | tr -s ' '  | grep "<none> <none>" | cut -d' ' -f3  | xargs -I {} $DOCKER_PATH rmi {} 
 }
@@ -87,14 +94,17 @@ EOF
 push() {
   local image_reference="$2"
   
-  local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$image_reference" | head -n1)
+  # Normalize the image reference (remove docker.io/ prefix)
+  local normalized_image_ref=$(normalize_image_reference "$image_reference")
+  
+  local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$normalized_image_ref" | head -n1)
   
   if [ -z "$image_id" ]; then
     echo "Could not find image for: $image_reference"
     return 1
   fi
   
-  if [ -f "$DOCKER_PUSH_LOG" ] && grep -q "^$image_reference,$image_id," "$DOCKER_PUSH_LOG"; then
+  if [ -f "$DOCKER_PUSH_LOG" ] && grep -q "^$normalized_image_ref,$image_id," "$DOCKER_PUSH_LOG"; then
     echo "Image $image_reference with image ID $image_id already pushed, skipping"
     return 0
   fi
@@ -102,7 +112,7 @@ push() {
   $DOCKER_PATH "$@"
   push_succeeds="$?"
   if [ $push_succeeds -eq 0 ]; then
-    register_push "$image_reference" "$image_id"
+    register_push "$normalized_image_ref" "$image_id"
   else
     echo "Docker push failed"
     return 1
@@ -126,19 +136,38 @@ register_push() {
 }
 
 pull() {
-  local image_reference="$2"
-  local tag="${image_reference##*:}"
+  # Find the image reference by looking for the last non-flag argument
+  local image_reference=""
+  local i=2
+  while [ $i -le $# ]; do
+    local arg="${!i}"
+    # If argument doesn't start with -, it's likely the image reference
+    if [[ ! "$arg" =~ ^- ]]; then
+      image_reference="$arg"
+    fi
+    ((i++))
+  done
+  
+  if [ -z "$image_reference" ]; then
+    echo "No image reference found in pull command. Passing through to docker..."
+    $DOCKER_PATH "$@"
+    return $?
+  fi
+  
+  # Normalize the image reference (remove docker.io/ prefix)
+  local normalized_image_ref=$(normalize_image_reference "$image_reference")
+  local tag="${normalized_image_ref##*:}"
  
-  # Check the pull log to check if eligible for skipping
-  if [ -f "$DOCKER_PULL_LOG" ] && grep -q "^$image_reference," "$DOCKER_PULL_LOG"; then
-    # Verify the image exists in the local repo
-    local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$image_reference" | head -n1)
+  # Check the pull log to check if eligible for skipping (use normalized reference)
+  if [ -f "$DOCKER_PULL_LOG" ] && grep -q "^$normalized_image_ref," "$DOCKER_PULL_LOG"; then
+    # Verify the image exists in the local repo (use normalized reference)
+    local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$normalized_image_ref" | head -n1)
     if [ -n "$image_id" ]; then
       echo "Image $image_reference with image ID $image_id already pulled, skipping"
       return 0
     else
       echo "Image $image_reference was previously pulled but no longer exists locally, cleaning log entry"
-      grep -v "^$image_reference," "$DOCKER_PULL_LOG" > "$DOCKER_PULL_LOG.tmp" && mv "$DOCKER_PULL_LOG.tmp" "$DOCKER_PULL_LOG"
+      grep -v "^$normalized_image_ref," "$DOCKER_PULL_LOG" > "$DOCKER_PULL_LOG.tmp" && mv "$DOCKER_PULL_LOG.tmp" "$DOCKER_PULL_LOG"
     fi
   fi
 
@@ -147,10 +176,10 @@ pull() {
   
   if [ $pull_succeeds -eq 0 ]; then
     # Only register pulls on eligible images (released and versioned images)
-    if [[ -n "$tag" ]] && [[ ! "$image_reference" =~ SNAPSHOT$ ]] && [[ "$tag" != "$image_reference" ]] && [[ "$tag" != "latest" ]]; then
-      local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$image_reference" | head -n1)
+    if [[ -n "$tag" ]] && [[ ! "$normalized_image_ref" =~ SNAPSHOT$ ]] && [[ "$tag" != "$normalized_image_ref" ]] && [[ "$tag" != "latest" ]]; then
+      local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$normalized_image_ref" | head -n1)
       if [ -n "$image_id" ]; then
-        register_pull "$image_reference"
+        register_pull "$normalized_image_ref"
       fi
     fi
   else
