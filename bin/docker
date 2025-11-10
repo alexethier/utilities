@@ -7,6 +7,12 @@
 
 set -e
 
+# Check for verbose flag
+if [[ "$1" == "-v" ]]; then
+  set -x
+  shift  # Remove -v from arguments
+fi
+
 # Generic function to get original command path (bypassing wrapper scripts)
 get_original_command() {
     local cmd="$1"
@@ -156,18 +162,35 @@ pull() {
   
   # Normalize the image reference (remove docker.io/ prefix)
   local normalized_image_ref=$(normalize_image_reference "$image_reference")
-  local tag="${normalized_image_ref##*:}"
+  
+  # Extract tag, handling digests properly
+  # For "image:tag@sha256:digest", we want just "tag"
+  local tag_part="${normalized_image_ref##*/}"  # Get everything after last "/"
+  if [[ "$tag_part" == *":"* ]]; then
+    tag="${tag_part#*:}"                        # Get everything after first ":"
+    tag="${tag%%@*}"                            # Remove digest part (everything after "@")
+  else
+    tag="latest"                                # No tag specified, default to latest
+  fi
  
-  # Check the pull log to check if eligible for skipping (use normalized reference)
-  if [ -f "$DOCKER_PULL_LOG" ] && grep -q "^$normalized_image_ref," "$DOCKER_PULL_LOG"; then
-    # Verify the image exists in the local repo (use normalized reference)
+  # Check the pull log to check if eligible for skipping (use normalized reference without digest)
+  local log_reference="${normalized_image_ref%%@*}"  # Remove @sha256:... part for log lookup
+  if [ -f "$DOCKER_PULL_LOG" ] && grep -q "^$log_reference," "$DOCKER_PULL_LOG"; then
+    # Verify the image exists in the local repo (try multiple lookup strategies)
     local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$normalized_image_ref" | head -n1)
+    
+    # If not found with full reference, try with just repository (for digest pulls)
+    if [ -z "$image_id" ]; then
+      local repo_only="${normalized_image_ref%%:*}"  # Remove :tag@digest part
+      image_id=$($DOCKER_PATH images --format "{{.ID}}" "$repo_only" | head -n1)
+    fi
+    
     if [ -n "$image_id" ]; then
       echo "Image $image_reference with image ID $image_id already pulled, skipping"
       return 0
     else
       echo "Image $image_reference was previously pulled but no longer exists locally, cleaning log entry"
-      grep -v "^$normalized_image_ref," "$DOCKER_PULL_LOG" > "$DOCKER_PULL_LOG.tmp" && mv "$DOCKER_PULL_LOG.tmp" "$DOCKER_PULL_LOG"
+      grep -v "^$log_reference," "$DOCKER_PULL_LOG" > "$DOCKER_PULL_LOG.tmp" && mv "$DOCKER_PULL_LOG.tmp" "$DOCKER_PULL_LOG"
     fi
   fi
 
@@ -177,9 +200,19 @@ pull() {
   if [ $pull_succeeds -eq 0 ]; then
     # Only register pulls on eligible images (released and versioned images)
     if [[ -n "$tag" ]] && [[ ! "$normalized_image_ref" =~ SNAPSHOT$ ]] && [[ "$tag" != "$normalized_image_ref" ]] && [[ "$tag" != "latest" ]]; then
+      # Try multiple ways to find the image ID
       local image_id=$($DOCKER_PATH images --format "{{.ID}}" "$normalized_image_ref" | head -n1)
+      
+      # If not found with full reference, try with just repository (for digest pulls)
+      if [ -z "$image_id" ]; then
+        local repo_only="${normalized_image_ref%%:*}"  # Remove :tag@digest part
+        image_id=$($DOCKER_PATH images --format "{{.ID}}" "$repo_only" | head -n1)
+      fi
+      
       if [ -n "$image_id" ]; then
-        register_pull "$normalized_image_ref"
+        # Store only repository:tag in log (remove digest for cleaner storage)
+        local log_reference="${normalized_image_ref%%@*}"  # Remove @sha256:... part
+        register_pull "$log_reference"
       fi
     fi
   else
@@ -406,6 +439,9 @@ elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "Docker Wrapper - Custom commands for docker"
   echo "Using docker binary: $DOCKER_PATH"
   echo ""
+  echo "Options:"
+  echo "  -v                         - Enable verbose mode (set -x for debugging)"
+  echo ""
   echo "Custom Commands:"
   echo "  clean                      - Remove all untagged images (<none>:<none>)"
   echo "  clean all                  - Remove untagged images and old versioned images"
@@ -418,7 +454,7 @@ elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo ""
   echo "All other commands are passed through to: $DOCKER_PATH"
   echo ""
-  echo "Usage: docker [command] [options]"
+  echo "Usage: docker [-v] [command] [options]"
 else
   $DOCKER_PATH "$@"
 fi
