@@ -15,6 +15,36 @@
 
 set -e
 
+# Check if first argument is one of our custom commands
+case "$1" in
+  fast|style|safe|help|-h|--help)
+    # Parse arguments for custom commands
+    ACTION="$1"
+    shift
+    SKIP_FIX_SCRIPT=false
+    MAVEN_ARGS=()
+    
+    # Parse remaining arguments for flags
+    while [[ $# -gt 0 ]]; do
+      case $1 in
+        -f|--fast)
+          SKIP_FIX_SCRIPT=true
+          shift
+          ;;
+        *)
+          # All other arguments go to Maven
+          MAVEN_ARGS+=("$1")
+          shift
+          ;;
+      esac
+    done
+    ;;
+  *)
+    # Not a custom command, pass everything to Maven
+    ACTION="passthrough"
+    ;;
+esac
+
 # Generic function to get original command path (bypassing wrapper scripts)
 get_original_command() {
     local cmd="$1"
@@ -52,11 +82,14 @@ Commands:
     [none]                  - Passes all arguments directly to Maven
 
 Options:
+    -f, --fast              - Skip running the Java style fix script (works with style command)
     All standard Maven options are supported when using direct Maven commands.
 
 Examples:
     mvn fast                - Run fast build
     mvn style               - Run style-focused build
+    mvn style -f            - Run style-focused build without running fix script
+    mvn style --fast        - Run style-focused build without running fix script
     mvn safe                - Run safe build in temporary directory
     mvn clean install       - Pass through to Maven directly
     mvn -DskipTests install - Pass through to Maven directly
@@ -65,14 +98,14 @@ EOF
 }
 
 style() {
-    # Check if JAVA_STYLE_FIX_SCRIPT_PATH is set and invoke it before running Maven
-    if [ -n "$JAVA_STYLE_FIX_SCRIPT_PATH" ]; then
+    # Check if JAVA_STYLE_FIX_SCRIPT_PATH is set and invoke it before running Maven (unless --fast/-f flag is used)
+    if [ -n "$JAVA_STYLE_FIX_SCRIPT_PATH" ] && [ "$SKIP_FIX_SCRIPT" = false ]; then
         echo "Running Java style fix script: $JAVA_STYLE_FIX_SCRIPT_PATH"
         "$JAVA_STYLE_FIX_SCRIPT_PATH"
     fi
 
     # Note: Install (at least package phase) is needed.
-    $MVN_COMMAND clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip
+    $MVN_COMMAND clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip "${MAVEN_ARGS[@]}"
 }
 fast() {
     $MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
@@ -95,14 +128,20 @@ safe() {
     cd "$current_dir"
 }
 
-if [[ "$1" == "fast" ]]; then
-    fast
-elif [[ "$1" == "style" ]]; then
-    style
-elif [[ "$1" == "safe" ]]; then
-    safe
-elif [[ "$1" == "help" ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
-    show_help
-else
-    $MVN_COMMAND "$@"
-fi
+case "$ACTION" in
+    fast)
+        fast
+        ;;
+    style)
+        style
+        ;;
+    safe)
+        safe
+        ;;
+    help|-h|--help)
+        show_help
+        ;;
+    passthrough|*)
+        $MVN_COMMAND "$@"
+        ;;
+esac
