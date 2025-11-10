@@ -2,6 +2,39 @@
 
 set -e
 
+# Check if first argument is one of our custom commands
+case "$1" in
+  save|delete|d|rebase|rebasem|owner|owners|dev|clean|help|-h|--help)
+    # Parse arguments for custom commands - normalize ACTION to static values
+    case "$1" in
+      save)           ACTION="save" ;;
+      delete|d)       ACTION="delete" ;;
+      rebase)         
+        # Special case: if $2 exists, pass through to git rebase
+        if [ -n "$2" ]; then
+          ACTION="passthrough"
+        else
+          ACTION="rebase"
+        fi
+        ;;
+      rebasem)        ACTION="rebasem" ;;
+      owner|owners)   ACTION="owner" ;;
+      dev)            ACTION="dev" ;;
+      clean)          ACTION="clean" ;;
+      help|-h|--help) ACTION="help" ;;
+    esac
+    
+    if [ "$ACTION" != "passthrough" ]; then
+      shift
+      CUSTOM_ARGS=("$@")
+    fi
+    ;;
+  *)
+    # Not a custom command, pass everything to git
+    ACTION="passthrough"
+    ;;
+esac
+
 # Generic function to get original command path (bypassing wrapper scripts)
 get_original_command() {
     local cmd="$1"
@@ -39,16 +72,17 @@ save() {
 }
 
 delete() {
-  SAVE_BRANCH="$1"
-  TARGET_BRANCH="$2"
-  if [ -z "$TARGET_BRANCH" ]; then
-     TARGET_BRANCH=`$GIT_PATH branch --show-current`
+  local save_branch="$1"
+  local target_branch="$2"
+  
+  if [ -z "$target_branch" ]; then
+     target_branch=`$GIT_PATH branch --show-current`
      $GIT_PATH checkout main
   fi
-  if [[ "$SAVE_BRANCH" == "true" ]]; then
-     save $TARGET_BRANCH
+  if [[ "$save_branch" == "true" ]]; then
+     save $target_branch
   fi
-  $GIT_PATH branch -D $TARGET_BRANCH
+  $GIT_PATH branch -D $target_branch
 }
 
 rebase_self() {
@@ -98,63 +132,84 @@ clean() {
   done
 }
 
-if false; then
-  echo "pass"
-elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
-  echo "Git wrapper is being used and overriding the git help command."
-  echo "Run '$GIT_PATH -h' to show git help"
-  echo ""
-  echo "Options: save, delete, rebase, rebasem (rebases main), clean <number>"
-elif [[ "$1" == "save" ]]; then
-  set -e
-  save 
-  set +e
-elif [[ "$1" == "delete" || "$1" == "d" ]]; then
-  set -e
-  save_branch="true"
-  if [ -z "$2" ]; then
-    echo "No target branch specified"
-  elif [[ "$2" == "-s" || "$2" == "--skip" || "$2" == "-skip" || "$2" == "s" ]];then
-    save_branch="false"
-  elif [[ "$2" != -* ]]; then
-    TARGET_BRANCH="$2"
-  fi
+# Action handler methods
+handle_save() {
+    save "${CUSTOM_ARGS[0]}"
+}
 
-  delete $save_branch $TARGET_BRANCH
-  set +e
-# Do not override the actual rebase command, do not override if there is a second argument to the rebase command
-elif [[ -z "$2" && "$1" == "rebase" ]]; then
-  set -e
-  rebase_self
-  set +e
-elif [[ "$1" == "rebasem" ]]; then
-  target_branch="main"
-  if ! $GIT_PATH branch | grep -q "$target_branch"; then
-    target_branch="main"
-  fi
+handle_delete() {
+    local skip_save=false
+    local target_branch=""
+    
+    # Parse arguments
+    for arg in "${CUSTOM_ARGS[@]}"; do
+        case $arg in
+            -s|--skip|-skip|s)
+                skip_save=true
+                ;;
+            *)
+                if [ -z "$target_branch" ]; then
+                    target_branch="$arg"
+                else
+                    echo "Error: Too many arguments. Expected: git delete [-s] <branch_name>"
+                    exit 1
+                fi
+                ;;
+        esac
+    done
+    local save_branch="true"
+    if [ "$skip_save" = true ]; then
+        save_branch="false"
+    fi
+    delete "$save_branch" "$target_branch"
+}
 
-  if [[ -n "$2" ]]; then
-    target_branch="$2"
-  fi
-  set -e
-  pull_branch $target_branch
-  save
-  $GIT_PATH rebase $target_branch
-  set +e
-elif [[ "$1" == "owner" || "$1" == "owners" ]]; then
-  $GIT_PATH remote prune origin
-  print_branch_owners
-elif [[ "$1" == "dev" ]]; then
-  dev
-elif [[ "$1" == "clean" ]]; then
-  clean "$2"
-else
-  # JGit will break if the user
-  # sets their gpg format to ssh
-  # because it doesn't support it
-  # which breaks nifi compilation
-  # to circumvent this, set the gpg format
-  # everytime the cli is invoked.
-  $GIT_PATH -c gpg.format=ssh "$@"
-fi
+handle_rebase() {
+    # Only override if no additional arguments (preserve original git rebase behavior)
+    if [ ${#CUSTOM_ARGS[@]} -eq 0 ]; then
+        rebase_self
+    else
+        $GIT_PATH -c gpg.format=ssh rebase "${CUSTOM_ARGS[@]}"
+    fi
+}
+
+handle_rebasem() {
+    local target_branch="main"
+    if ! $GIT_PATH branch | grep -q "$target_branch"; then
+        target_branch="main"
+    fi
+    if [ -n "${CUSTOM_ARGS[0]}" ]; then
+        target_branch="${CUSTOM_ARGS[0]}"
+    fi
+    pull_branch "$target_branch"
+    save
+    $GIT_PATH rebase "$target_branch"
+}
+
+handle_owners() {
+    $GIT_PATH remote prune origin
+    print_branch_owners
+}
+
+handle_help() {
+    echo "Git wrapper is being used and overriding the git help command."
+    echo "Run '$GIT_PATH -h' to show git help"
+    echo ""
+    echo "Options: save, delete, rebase, rebasem (rebases main), clean <number>"
+    echo "Flags: -s/--skip (for delete: skip saving branch before deletion)"
+}
+
+# Action dispatch
+case "$ACTION" in
+    save)           handle_save ;;
+    delete)         handle_delete ;;
+    rebase)         handle_rebase ;;
+    rebasem)        handle_rebasem ;;
+    owner)          handle_owners ;;
+    dev)            dev ;;
+    clean)          clean "${CUSTOM_ARGS[0]}" ;;
+    help)           handle_help ;;
+    passthrough)    $GIT_PATH -c gpg.format=ssh "$@" ;;
+    *)              echo "Error: Unknown action '$ACTION'" >&2; exit 1 ;;
+esac
 
