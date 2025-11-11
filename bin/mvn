@@ -98,17 +98,35 @@ EOF
 }
 
 style() {
+    # Get list of last 100 unique recently edited Java files
+    recent_files=()
+    while IFS= read -r file; do
+        recent_files+=("$file")
+    done < <(git log --pretty=format: --name-only | grep '\.java$' | awk '!seen[$0]++ { print; count++ } count==100 { exit }')
+    
     # Check if JAVA_STYLE_FIX_SCRIPT_PATH is set and invoke it before running Maven (unless --fast/-f flag is used)
     if [ -n "$JAVA_STYLE_FIX_SCRIPT_PATH" ] && [ "$SKIP_FIX_SCRIPT" = false ]; then
         echo "Running Java style fix script: $JAVA_STYLE_FIX_SCRIPT_PATH"
-        "$JAVA_STYLE_FIX_SCRIPT_PATH"
+        echo "Processing ${#recent_files[@]} recently edited files"
+        "$JAVA_STYLE_FIX_SCRIPT_PATH" "${recent_files[@]}" || true
+    fi
+
+    # Source a script, if available, that can speed up the build
+    if [ -f "$MVN_FAST_HOOK_FILE" ]; then
+        source "$MVN_FAST_HOOK_FILE"
     fi
 
     # Note: Install (at least package phase) is needed.
-    $MVN_COMMAND clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip "${MAVEN_ARGS[@]}"
+    $MVN_COMMAND clean install -T2.0C -DskipTests -Dmaven.javadoc.skip=true -Dmaven.test.skip -DskipBuildImages=true "${MAVEN_ARGS[@]}"
 }
 fast() {
-    $MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
+    # Source a script, if available, that can speed up the build
+    if [ -f "$MVN_FAST_HOOK_FILE" ]; then
+        source "$MVN_FAST_HOOK_FILE"
+    fi
+
+    #$MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
+    $MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true -DskipBuildImages=true 
 }
 safe() {
     # Check if pom.xml exists in current directory
@@ -124,7 +142,7 @@ safe() {
     # Copy all files excluding target directory
     tar -C "$current_dir" --exclude='target' -cf - . | tar -C "$tmp_dir" -xf -
     cd "$tmp_dir"    
-    ./mvnw clean install    
+    ./mvnw -U clean install    
     cd "$current_dir"
 }
 
