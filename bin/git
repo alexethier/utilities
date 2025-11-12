@@ -4,7 +4,7 @@ set -e
 
 # Check if first argument is one of our custom commands
 case "$1" in
-  save|delete|d|rebase|rebasem|owner|owners|dev|clean|help|-h|--help)
+  save|delete|d|rebase|rebasem|owner|owners|dev|clean|commit|help|-h|--help)
     # Parse arguments for custom commands - normalize ACTION to static values
     case "$1" in
       save)           ACTION="save" ;;
@@ -21,6 +21,14 @@ case "$1" in
       owner|owners)   ACTION="owner" ;;
       dev)            ACTION="dev" ;;
       clean)          ACTION="clean" ;;
+      commit)
+        # Special case: if $2 exists, pass through to git commit
+        if [ -n "$2" ]; then
+          ACTION="passthrough"
+        else
+          ACTION="commit"
+        fi
+        ;;
       help|-h|--help) ACTION="help" ;;
     esac
     
@@ -191,6 +199,10 @@ handle_owners() {
     print_branch_owners
 }
 
+handle_commit() {
+    $GIT_PATH commit -m "INTERIM WORK"
+}
+
 handle_help() {
     echo "Git wrapper is being used and overriding the git help command."
     echo "Run '$GIT_PATH -h' to show git help"
@@ -208,6 +220,7 @@ case "$ACTION" in
     owner)          handle_owners ;;
     dev)            dev ;;
     clean)          clean "${CUSTOM_ARGS[0]}" ;;
+    commit)         handle_commit ;;
     help)           handle_help ;;
     passthrough)    $GIT_PATH -c gpg.format=ssh "$@" ;;
     *)              echo "Error: Unknown action '$ACTION'" >&2; exit 1 ;;
