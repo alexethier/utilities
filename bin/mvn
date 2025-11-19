@@ -99,10 +99,46 @@ EOF
 
 style() {
     # Get list of last 100 unique recently edited Java files
+    # Priority: uncommitted files first (staged + modified), then committed files from history
     recent_files=()
+    
+    # Step 1: Get uncommitted Java files (staged and modified)
     while IFS= read -r file; do
-        recent_files+=("$file")
-    done < <(git log --pretty=format: --name-only | grep '\.java$' | awk '!seen[$0]++ { print; count++ } count==100 { exit }')
+        if [ -n "$file" ] && [ -f "$file" ]; then
+            recent_files+=("$file")
+        fi
+    done < <(
+        {
+            git diff --cached --name-only --diff-filter=AM 2>/dev/null || true
+            git diff --name-only --diff-filter=AM 2>/dev/null || true
+        } | grep '\.java$' | sort -u
+    )
+    
+    # Step 2: If we have fewer than 100 files, backfill from git history
+    current_count=${#recent_files[@]}
+    if [ "$current_count" -lt 100 ]; then
+        # Build a pattern to skip already-found files
+        skip_pattern=""
+        if [ "$current_count" -gt 0 ]; then
+            skip_pattern=$(printf "%s\n" "${recent_files[@]}" | awk '{printf "%s%s", (NR>1?"|":""), $0}')
+        fi
+        
+        # Get remaining files from git history (keep fetching until we have 100 existing files)
+        while IFS= read -r file; do
+            if [ -n "$file" ] && [ -f "$file" ]; then
+                recent_files+=("$file")
+                if [ "${#recent_files[@]}" -ge 100 ]; then
+                    break
+                fi
+            fi
+        done < <(
+            if [ -n "$skip_pattern" ]; then
+                git log --pretty=format: --name-only | grep '\.java$' | awk -v skip="$skip_pattern" '!seen[$0]++ && $0 !~ skip { print }'
+            else
+                git log --pretty=format: --name-only | grep '\.java$' | awk '!seen[$0]++ { print }'
+            fi
+        )
+    fi
     
     # Check if JAVA_STYLE_FIX_SCRIPT_PATH is set and invoke it before running Maven (unless --fast/-f flag is used)
     if [ -n "$JAVA_STYLE_FIX_SCRIPT_PATH" ] && [ "$SKIP_FIX_SCRIPT" = false ]; then
@@ -126,7 +162,7 @@ fast() {
     fi
 
     #$MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true
-    $MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true -DskipBuildImages=true 
+    $MVN_COMMAND clean install -T2.0C -DskipTests -Dspotbugs.skip=true -Dcheckstyle.skip -Dpmd.skip=true -Dmaven.javadoc.skip=true -Dmaven.test.skip -Denforcer.skip=true -Drat.skip=true -DskipBuildImages=true "${MAVEN_ARGS[@]}"
 }
 safe() {
     # Check if pom.xml exists in current directory
