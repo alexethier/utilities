@@ -27,6 +27,10 @@ case "$1" in
     # Parse remaining arguments for flags
     while [[ $# -gt 0 ]]; do
       case $1 in
+        -v|--verbose)
+          set -x
+          shift
+          ;;
         -f|--fast)
           SKIP_FIX_SCRIPT=true
           shift
@@ -82,11 +86,13 @@ Commands:
     [none]                  - Passes all arguments directly to Maven
 
 Options:
+    -v, --verbose           - Enable verbose mode (set -x for debugging)
     -f, --fast              - Skip running the Java style fix script (works with style command)
     All standard Maven options are supported when using direct Maven commands.
 
 Examples:
     mvn fast                - Run fast build
+    mvn -v style            - Run style-focused build with verbose output
     mvn style               - Run style-focused build
     mvn style -f            - Run style-focused build without running fix script
     mvn style --fast        - Run style-focused build without running fix script
