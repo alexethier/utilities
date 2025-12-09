@@ -4,11 +4,12 @@ set -e
 
 # Check if first argument is one of our custom commands
 case "$1" in
-  save|delete|d|rebase|rebasem|owner|owners|dev|clean|commit|help|-h|--help)
+  save|delete|d|rebase|rebasem|pushm|owner|owners|dev|clean|commit|retry|help|-h|--help)
     # Parse arguments for custom commands - normalize ACTION to static values
     case "$1" in
       save)           ACTION="save" ;;
       delete|d)       ACTION="delete" ;;
+      retry)          ACTION="retry" ;;
       rebase)         
         # Special case: if $2 exists, pass through to git rebase
         if [ -n "$2" ]; then
@@ -18,6 +19,7 @@ case "$1" in
         fi
         ;;
       rebasem)        ACTION="rebasem" ;;
+      pushm)          ACTION="pushm" ;;
       owner|owners)   ACTION="owner" ;;
       dev)            ACTION="dev" ;;
       clean)          ACTION="clean" ;;
@@ -189,9 +191,15 @@ handle_rebasem() {
     if [ -n "${CUSTOM_ARGS[0]}" ]; then
         target_branch="${CUSTOM_ARGS[0]}"
     fi
-    pull_branch "$target_branch"
     save
+    pull_branch "$target_branch"
     $GIT_PATH rebase "$target_branch"
+}
+
+handle_pushm() {
+    handle_rebasem    
+    local current_branch=$($GIT_PATH branch --show-current)
+    $GIT_PATH push -u origin "$current_branch" --force
 }
 
 handle_owners() {
@@ -203,12 +211,29 @@ handle_commit() {
     $GIT_PATH commit -m "INTERIM WORK"
 }
 
+handle_retry() {
+    save
+    $GIT_PATH commit --amend --no-edit --date=now
+}
+
 handle_help() {
     echo "Git wrapper is being used and overriding the git help command."
     echo "Run '$GIT_PATH -h' to show git help"
     echo ""
-    echo "Options: save, delete, rebase, rebasem (rebases main), clean <number>"
-    echo "Flags: -s/--skip (for delete: skip saving branch before deletion)"
+    echo "Custom Commands:"
+    echo "  save [branch]           - Create a versioned backup branch (aetmpN) from current or specified branch"
+    echo "  delete [branch]         - Delete a branch (saves backup first unless -s flag is used)"
+    echo "  rebase                  - Interactive rebase of last 10 commits (saves backup first)"
+    echo "  rebasem [branch]        - Pull and rebase onto main (or specified branch), saves backup first"
+    echo "  pushm [branch]          - Calls rebasem then pushes current branch to origin"
+    echo "  clean <number>          - Delete the N oldest aetmp backup branches"
+    echo "  commit                  - Quick commit with 'INTERIM WORK' message"
+    echo "  retry                   - Save backup and amend last commit with current timestamp"
+    echo "  dev                     - Create and push dev/ae-<branch> branch, then return to original"
+    echo "  owner|owners            - Show branch owners from remote"
+    echo ""
+    echo "Flags:"
+    echo "  -s, --skip              - (for delete) Skip saving backup before deletion"
 }
 
 # Action dispatch
@@ -217,10 +242,12 @@ case "$ACTION" in
     delete)         handle_delete ;;
     rebase)         handle_rebase ;;
     rebasem)        handle_rebasem ;;
+    pushm)          handle_pushm ;;
     owner)          handle_owners ;;
     dev)            dev ;;
     clean)          clean "${CUSTOM_ARGS[0]}" ;;
     commit)         handle_commit ;;
+    retry)          handle_retry ;;
     help)           handle_help ;;
     passthrough)    $GIT_PATH -c gpg.format=ssh "$@" ;;
     *)              echo "Error: Unknown action '$ACTION'" >&2; exit 1 ;;
