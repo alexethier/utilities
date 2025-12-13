@@ -11,13 +11,14 @@
 #   fast    - Fast build with all non-essential plugins disabled (tests, style checks, etc.)
 #   style   - Style-focused build with code quality checks but tests disabled
 #   safe    - Safe build that copies current directory to temp location and runs ./mvnw clean install
+#   test    - Compile code and run unit tests only (test-compile + surefire:test)
 #   [none]  - Passes all arguments directly to the Maven command ($M2_HOME/bin/mvn)
 
 set -e
 
 # Check if first argument is one of our custom commands
 case "$1" in
-  fast|style|safe|help|-h|--help)
+  fast|style|safe|test|help|-h|--help)
     # Parse arguments for custom commands
     ACTION="$1"
     shift
@@ -82,6 +83,7 @@ Commands:
                               (runs checkstyle, spotbugs, pmd but skips tests and javadoc)
     safe                    - Safe build that copies current directory to temp location
                               and runs a full build ./mvnw clean install (requires pom.xml and mvnw)
+    test                    - Compile code and run unit tests only (test-compile + surefire:test)
     help, -h, --help        - Show this help message
     [none]                  - Passes all arguments directly to Maven
 
@@ -97,6 +99,7 @@ Examples:
     mvn style -f            - Run style-focused build without running fix script
     mvn style --fast        - Run style-focused build without running fix script
     mvn safe                - Run safe build in temporary directory
+    mvn test                - Compile and run unit tests only
     mvn clean install       - Pass through to Maven directly
     mvn -DskipTests install - Pass through to Maven directly
 
@@ -188,6 +191,11 @@ safe() {
     cd "$current_dir"
 }
 
+test() {
+    $MVN_COMMAND clean test-compile -T2.0C "${MAVEN_ARGS[@]}"    
+    $MVN_COMMAND surefire:test -T2.0C -Dsurefire.skipAfterFailureCount=1 "${MAVEN_ARGS[@]}"
+}
+
 case "$ACTION" in
     fast)
         fast
@@ -197,6 +205,9 @@ case "$ACTION" in
         ;;
     safe)
         safe
+        ;;
+    test)
+        test
         ;;
     help|-h|--help)
         show_help
