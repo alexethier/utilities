@@ -102,9 +102,50 @@ git push origin fork/<pr_branch>_ai_fix_conflicts:<pr_branch> --force
 - The draft PR is for viewing only - do not merge it
 - Re-running starts fresh from main (idempotent)
 
+## Build Tester
+
+The build tester (`prbot test`) runs builds in 3 stages and uses AI to fix any errors.
+
+### Usage
+
+```bash
+prbot test -b <pr_branch>
+```
+
+Or test all your open PRs:
+
+```bash
+prbot test
+```
+
+### Stages
+
+1. **Compile** - Compile only, skip tests
+2. **Unit Tests** - Run unit tests
+3. **Full Build** - Complete build with all tests
+
+### Workflow
+
+For each stage:
+
+1. AI analyzes the project and determines the appropriate build command
+2. Command is executed, output captured to log file
+3. If build fails, AI reads the log and fixes the code
+4. Fix is committed as `[BUILD FIX - <Stage>] <description>`
+5. Retries until pass or max retries (3) reached
+
+Fixes are pushed to the `<pr_branch>_ai_review` branch on fork and a PR is created.
+
+### Notes
+
+- AI auto-detects build system (Maven, Gradle, npm, etc.)
+- Each stage runs sequentially - later stages only run if earlier ones pass
+- Uses the same `_ai_review` branch as the review action
+
 ## Other Tools
 
 - `prbot` - Main entry point for PR operations
 - `util/common.sh` - Shared utilities
 - `commenter/comment_handler.sh` - PR comment handling
+- `tester/build_tester.sh` - Build testing and fixing
 

@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/util/cursor_runner.sh"
 # Source the handler functions
 source "$SCRIPT_DIR/commenter/comment_handler.sh"
 source "$SCRIPT_DIR/conflict_fixer/cherry_pick_fixer.sh"
+source "$SCRIPT_DIR/tester/build_tester.sh"
 
 # Check for required environment variables
 missing_vars=()
@@ -56,6 +57,7 @@ Required Environment Variables:
 Actions:
   review        Process PR review comments with laugh reactions
   fix_conflict  Fix conflicts by cherry-picking PR commits onto main
+  test          Run builds and fix errors with AI (compile, unit tests, full build)
 
 Global Options:
   -l, --loop      Run continuously, checking every 15 minutes
@@ -173,10 +175,38 @@ run_action() {
 
             action_fix_conflict
             ;;
+        test)
+            # Test-specific options
+            BRANCH=""
+
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -h|--help)
+                        show_test_help
+                        exit 0
+                        ;;
+                    -b|--branch)
+                        if [ -z "$2" ]; then
+                            echo "Error: -b/--branch requires a branch name"
+                            exit 1
+                        fi
+                        BRANCH="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Error: Unknown option '$1' for test action"
+                        echo "Run '$0 test --help' for usage."
+                        exit 1
+                        ;;
+                esac
+            done
+
+            action_test "$BRANCH"
+            ;;
         all)
-            # In loop mode, only run review (fix_conflict must be explicit)
-            echo "💬 Running review action..."
+            echo "💬 Running actions on branch $BRANCH..."
             action_review "$BRANCH"
+            action_test "$BRANCH"
             ;;
         *)
             echo "Error: Unknown action '$ACTION'"
