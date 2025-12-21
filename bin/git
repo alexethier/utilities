@@ -4,7 +4,7 @@ set -e
 
 # Check if first argument is one of our custom commands
 case "$1" in
-  save|delete|d|rebase|rebasem|pushm|owner|owners|dev|clean|commit|retry|help|-h|--help)
+  save|delete|d|rebase|rebasem|pushm|owner|owners|dev|clear|commit|retry|help|-h|--help)
     # Parse arguments for custom commands - normalize ACTION to static values
     case "$1" in
       save)           ACTION="save" ;;
@@ -22,7 +22,7 @@ case "$1" in
       pushm)          ACTION="pushm" ;;
       owner|owners)   ACTION="owner" ;;
       dev)            ACTION="dev" ;;
-      clean)          ACTION="clean" ;;
+      clear)          ACTION="clear" ;;
       commit)
         # Special case: if $2 exists, pass through to git commit
         if [ -n "$2" ]; then
@@ -121,11 +121,11 @@ print_branch_owners() {
   $GIT_PATH for-each-ref --format='%(refname:short) %(authorname)' refs/remotes/
 }
 
-clean() {
+clear() {
   local count="$1"
   
   if [ -z "$count" ] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
-    echo "Usage: git clean <number>"
+    echo "Usage: git clear <number>"
     echo "Deletes the specified number of smallest versioned aetmp branches"
     return 1
   fi
@@ -169,7 +169,7 @@ handle_delete() {
     done
     local save_branch="true"
     if [ "$skip_save" = true ]; then
-        save_branch="false"
+    save_branch="false"
     fi
     delete "$save_branch" "$target_branch"
 }
@@ -177,7 +177,7 @@ handle_delete() {
 handle_rebase() {
     # Only override if no additional arguments (preserve original git rebase behavior)
     if [ ${#CUSTOM_ARGS[@]} -eq 0 ]; then
-        rebase_self
+  rebase_self
     else
         $GIT_PATH -c gpg.format=ssh rebase "${CUSTOM_ARGS[@]}"
     fi
@@ -185,12 +185,12 @@ handle_rebase() {
 
 handle_rebasem() {
     local target_branch="main"
-    if ! $GIT_PATH branch | grep -q "$target_branch"; then
-        target_branch="main"
-    fi
+  if ! $GIT_PATH branch | grep -q "$target_branch"; then
+    target_branch="main"
+  fi
     if [ -n "${CUSTOM_ARGS[0]}" ]; then
         target_branch="${CUSTOM_ARGS[0]}"
-    fi
+  fi
     save
     pull_branch "$target_branch"
     $GIT_PATH rebase "$target_branch"
@@ -203,8 +203,8 @@ handle_pushm() {
 }
 
 handle_owners() {
-    $GIT_PATH remote prune origin
-    print_branch_owners
+  $GIT_PATH remote prune origin
+  print_branch_owners
 }
 
 handle_commit() {
@@ -226,7 +226,7 @@ handle_help() {
     echo "  rebase                  - Interactive rebase of last 10 commits (saves backup first)"
     echo "  rebasem [branch]        - Pull and rebase onto main (or specified branch), saves backup first"
     echo "  pushm [branch]          - Calls rebasem then pushes current branch to origin"
-    echo "  clean <number>          - Delete the N oldest aetmp backup branches"
+    echo "  clear <number>          - Delete the N oldest aetmp backup branches"
     echo "  commit                  - Quick commit with 'INTERIM WORK' message"
     echo "  retry                   - Save backup and amend last commit with current timestamp"
     echo "  dev                     - Create and push dev/ae-<branch> branch, then return to original"
@@ -245,7 +245,7 @@ case "$ACTION" in
     pushm)          handle_pushm ;;
     owner)          handle_owners ;;
     dev)            dev ;;
-    clean)          clean "${CUSTOM_ARGS[0]}" ;;
+    clear)          clear "${CUSTOM_ARGS[0]}" ;;
     commit)         handle_commit ;;
     retry)          handle_retry ;;
     help)           handle_help ;;
