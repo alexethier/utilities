@@ -1,0 +1,209 @@
+#!/bin/bash
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source utilities first
+source "$SCRIPT_DIR/util/fork_manager.sh"
+source "$SCRIPT_DIR/util/common.sh"
+source "$SCRIPT_DIR/util/cursor_runner.sh"
+
+# Source the handler functions
+source "$SCRIPT_DIR/commenter/comment_handler.sh"
+source "$SCRIPT_DIR/conflict_fixer/cherry_pick_fixer.sh"
+
+# Check for required environment variables
+missing_vars=()
+[ -z "$PRBOT_WORKDIR" ] && missing_vars+=("PRBOT_WORKDIR")
+[ -z "$PRBOT_REPO_OWNER" ] && missing_vars+=("PRBOT_REPO_OWNER")
+[ -z "$PRBOT_FORK_OWNER" ] && missing_vars+=("PRBOT_FORK_OWNER")
+[ -z "$PRBOT_FORK_PREFIX" ] && missing_vars+=("PRBOT_FORK_PREFIX")
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo "Error: Required environment variables are not set:"
+    for var in "${missing_vars[@]}"; do
+        echo "  - $var"
+    done
+    echo ""
+    echo "Please set them before running prbot:"
+    echo "  export PRBOT_WORKDIR=/path/to/workdir"
+    echo "  export PRBOT_REPO_OWNER=your-org"
+    echo "  export PRBOT_FORK_OWNER=your-github-username"
+    echo "  export PRBOT_FORK_PREFIX=yourprefix-"
+    exit 1
+fi
+
+# Create workdir if it doesn't exist
+mkdir -p "$PRBOT_WORKDIR"
+
+# Global variables
+LOOP=false
+INTERVAL=900  # 15 minutes in seconds
+
+# Show main help
+show_help() {
+    cat << EOF
+Usage: $0 [global options] <action> [action options]
+
+Required Environment Variables:
+  PRBOT_WORKDIR      Directory where repositories will be cloned
+  PRBOT_REPO_OWNER   GitHub org/user that owns the main repos (e.g., "your-org")
+  PRBOT_FORK_OWNER   GitHub user that owns your forks (e.g., "your-username")
+  PRBOT_FORK_PREFIX  Prefix for fork repo names (e.g., "yourprefix-")
+
+Actions:
+  review        Process PR review comments with laugh reactions
+  fix_conflict  Fix conflicts by cherry-picking PR commits onto main
+
+Global Options:
+  -l, --loop      Run continuously, checking every 15 minutes
+                  If no action specified, runs both rebase and review
+  -v, --verbose   Enable debug output (set -x)
+  -h, --help      Show this help message
+
+Run '$0 <action> --help' for action-specific options.
+EOF
+}
+
+# Handle no arguments - show help
+if [[ $# -eq 0 ]]; then
+    show_help
+    exit 0
+fi
+
+# Parse global options first
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -l|--loop)
+            LOOP=true
+            shift
+            ;;
+        -v|--verbose)
+            set -x
+            shift
+            ;;
+        -*)
+            echo "Error: Unknown global option '$1'"
+            echo "Run '$0 --help' for usage."
+            exit 1
+            ;;
+        *)
+            # Not an option, must be an action
+            break
+            ;;
+    esac
+done
+
+# Get action (optional if looping)
+if [[ $# -eq 0 ]]; then
+    if [ "$LOOP" = true ]; then
+        ACTION="all"
+    else
+        echo "Error: No action specified"
+        echo "Run '$0 --help' for usage."
+        exit 1
+    fi
+else
+    ACTION="$1"
+    shift
+fi
+
+# Execute action (with optional loop wrapper)
+run_action() {
+    case "$ACTION" in
+        review)
+            # Review-specific options
+            BRANCH=""
+
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -h|--help)
+                        show_review_help
+                        exit 0
+                        ;;
+                    -b|--branch)
+                        if [ -z "$2" ]; then
+                            echo "Error: -b/--branch requires a branch name"
+                            exit 1
+                        fi
+                        BRANCH="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Error: Unknown option '$1' for review action"
+                        echo "Run '$0 review --help' for usage."
+                        exit 1
+                        ;;
+                esac
+            done
+
+            action_review "$BRANCH"
+            ;;
+        fix_conflict)
+            # Fix conflict-specific options
+            BRANCH=""
+
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -h|--help)
+                        show_fix_conflict_help
+                        exit 0
+                        ;;
+                    -b|--branch)
+                        if [ -z "$2" ]; then
+                            echo "Error: -b/--branch requires a branch name"
+                            exit 1
+                        fi
+                        BRANCH="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Error: Unknown option '$1' for fix_conflict action"
+                        echo "Run '$0 fix_conflict --help' for usage."
+                        exit 1
+                        ;;
+                esac
+            done
+
+            action_fix_conflict
+            ;;
+        all)
+            # In loop mode, only run review (fix_conflict must be explicit)
+            echo "💬 Running review action..."
+            action_review "$BRANCH"
+            ;;
+        *)
+            echo "Error: Unknown action '$ACTION'"
+            echo "Run '$0 --help' for usage."
+            exit 1
+            ;;
+    esac
+}
+
+# Run with or without loop
+if [ "$LOOP" = true ]; then
+    echo "🔁 Loop mode enabled - will check every 15 minutes"
+    echo "Press Ctrl+C to stop"
+    echo ""
+    
+    while true; do
+        if [ "$ACTION" = "all" ]; then
+            echo "⏰ $(date '+%Y-%m-%d %H:%M:%S') - Starting review..."
+        else
+            echo "⏰ $(date '+%Y-%m-%d %H:%M:%S') - Starting $ACTION..."
+        fi
+        run_action "$@"
+        echo ""
+        echo "😴 Sleeping for 15 minutes..."
+        sleep "$INTERVAL"
+        echo ""
+    done
+else
+    run_action "$@"
+fi
