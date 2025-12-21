@@ -1,14 +1,57 @@
 #!/bin/bash
 
-PROMPT="$1"
+# Parse arguments
+# Mode 1: Single arg is the prompt
+# Mode 2: -p <prompt> -m <model>
+PROMPT=""
+MODEL=""
+
+if [ $# -eq 1 ]; then
+    # Single arg mode - arg is the prompt
+    PROMPT="$1"
+else
+    # Multi-arg mode - parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -p|--prompt)
+                PROMPT="$2"
+                shift 2
+                ;;
+            -m|--model)
+                MODEL="$2"
+                shift 2
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: cursor <prompt>"
+                echo "       cursor -p <prompt> -m <model>"
+                exit 1
+                ;;
+        esac
+    done
+fi
+
+if [ -z "$PROMPT" ]; then
+    echo "Error: No prompt provided"
+    echo "Usage: cursor <prompt>"
+    echo "       cursor -p <prompt> -m <model>"
+    exit 1
+fi
+
 echo "🚀 Processing prompt: [$PROMPT]"
+[ -n "$MODEL" ] && echo "📦 Requested model: $MODEL"
 
 # Track progress in real-time
 tool_count=0
 start_time=$(date +%s)
 
-cursor-agent -p --force --output-format stream-json --stream-partial-output \
-  "$PROMPT" | \
+# Build model flag if specified
+MODEL_FLAG=""
+if [ -n "$MODEL" ]; then
+    MODEL_FLAG="--model $MODEL"
+fi
+
+cursor-agent -p --force --output-format stream-json --stream-partial-output $MODEL_FLAG "$PROMPT" | \
   while IFS= read -r line; do
     
     type=$(echo "$line" | jq -r '.type // empty')
