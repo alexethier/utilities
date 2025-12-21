@@ -126,11 +126,11 @@ File: $abs_filepath
 ${line_info}${code_context}
 Comment: $body
 
-If you ever run mvn be sure to include the -o flag to avoid using the internet.
+You do not need to run tests, tests will be run in a later step.
 EOF
     )
 
-    run_cursor_isolated "$prompt"
+    run_cursor_isolated "$prompt" true
 
     # Commit any changes made by cursor
     git add -A

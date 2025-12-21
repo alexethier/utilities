@@ -97,12 +97,12 @@ File: $abs_file
 EOF
         )
         
-        run_cursor_isolated "$prompt"
+        run_cursor "$prompt" true
         
         # Check if conflicts are fixed
         if grep -q "^<<<<<<< " "$file" 2>/dev/null; then
             echo "⚠️  Conflict markers still present in $file, retrying..."
-            run_cursor_isolated "$prompt"
+            run_cursor "$prompt" true
         fi
     done < conflicts.txt
 

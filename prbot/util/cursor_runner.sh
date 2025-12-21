@@ -2,10 +2,41 @@
 # Cursor utility functions for prbot
 # This file is sourced by handler scripts that need to run cursor
 
+# Model configuration
+CURSOR_MODEL_DEFAULT="claude-sonnet-4.5"
+CURSOR_MODEL_THINKING="claude-opus-4"
+
+# Run cursor with prompt and optional improved thinking
+# Usage: run_cursor <prompt> [use_thinking]
+# Args:
+#   prompt       - The prompt to send to cursor
+#   use_thinking - Optional boolean (true/false). If true, uses opus model. Default: false
+run_cursor() {
+    local prompt="$1"
+    local use_thinking="${2:-false}"
+    
+    local model="$CURSOR_MODEL_DEFAULT"
+    if [ "$use_thinking" = "true" ]; then
+        model="$CURSOR_MODEL_THINKING"
+    fi
+    
+    cursor -p "$prompt" -m "$model"
+}
+
 # Run cursor in a completely isolated process
-# Usage: run_cursor_isolated "prompt"
+# Usage: run_cursor_isolated "prompt" [use_thinking]
+# Args:
+#   prompt       - The prompt to send to cursor
+#   use_thinking - Optional boolean (true/false). If true, uses opus model. Default: false
 run_cursor_isolated() {
     local prompt="$1"
+    local use_thinking="${2:-false}"
+    
+    # Select model based on thinking flag
+    local model="$CURSOR_MODEL_DEFAULT"
+    if [ "$use_thinking" = "true" ]; then
+        model="$CURSOR_MODEL_THINKING"
+    fi
     
     # Resolve full path to cursor executable
     local cursor_path=$(which cursor)
@@ -25,10 +56,11 @@ run_cursor_isolated() {
     local log_file="$runner_dir/log"
     
     echo "📜 Runner dir: $runner_dir"
+    echo "🤖 Model: $model"
     
     cat > "$runner_script" <<RUNNER_EOF
 #!/usr/bin/env bash --norc --noprofile
-$cursor_path "$prompt" | tee "$log_file" 2>&1
+$cursor_path -p "$prompt" -m "$model" | tee "$log_file" 2>&1
 echo \$? > "$exit_file"
 RUNNER_EOF
     chmod +x "$runner_script"

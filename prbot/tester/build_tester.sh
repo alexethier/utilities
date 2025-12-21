@@ -177,7 +177,7 @@ _run_stage() {
     rm -f "$cmd_file"
     
     local cmd_prompt=$(_get_stage_prompt "$stage" "$cmd_file")
-    run_cursor_isolated "$cmd_prompt"
+    run_cursor "$cmd_prompt"
     
     if [ ! -f "$cmd_file" ]; then
         echo "❌ AI did not create command file"
@@ -217,7 +217,7 @@ _run_stage() {
         # Ask AI to fix
         echo "🤖 Asking AI to fix the errors..."
         local fix_prompt=$(_get_fix_prompt "$output_file")
-        run_cursor_isolated "$fix_prompt"
+        run_cursor "$fix_prompt" true
         
         # Check if AI made changes
         git add -A
