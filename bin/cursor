@@ -38,14 +38,17 @@ run_cursor_agent() {
           "tool_call")
             if [ "$subtype" = "started" ]; then
               tool_count=$((tool_count + 1))
+              tool_name=$(echo "$line" | jq -r '.tool_call | keys[0] // "unknown"')
 
-              # Extract tool information
+              # Extract tool-specific details
               if echo "$line" | jq -e '.tool_call.writeToolCall' > /dev/null 2>&1; then
                 path=$(echo "$line" | jq -r '.tool_call.writeToolCall.args.path // "unknown"')
-                echo -e "\n🔧 Tool #$tool_count: Creating $path"
+                echo -e "\n🔧 [$tool_name] #$tool_count: Creating $path"
               elif echo "$line" | jq -e '.tool_call.readToolCall' > /dev/null 2>&1; then
                 path=$(echo "$line" | jq -r '.tool_call.readToolCall.args.path // "unknown"')
-                echo -e "\n📖 Tool #$tool_count: Reading $path"
+                echo -e "\n📖 [$tool_name] #$tool_count: Reading $path"
+              else
+                echo -e "\n🔧 [$tool_name] #$tool_count"
               fi
 
             elif [ "$subtype" = "completed" ]; then
