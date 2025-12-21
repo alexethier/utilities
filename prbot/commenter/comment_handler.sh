@@ -189,6 +189,9 @@ process_pr() {
         echo "🔗 https://github.com/$repo_owner/$repo_name/pull/$pr_number"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         
+        # Track if we made any commits
+        local initial_commit=$(git rev-parse HEAD)
+        
         # Loop through each comment and process it
         while IFS= read -r comment; do
             if [ -n "$comment" ]; then
@@ -196,11 +199,15 @@ process_pr() {
             fi
         done <<< "$comments"
         
-        # Ensure PR branch exists on fork (needed as base for AI PR)
-        push_to_fork "$repo_name" "$pr_branch"
-        
-        # Push the AI review branch and create a PR
-        push_and_create_pr "$repo_name" "$pr_branch" "This PR contains AI-generated implementations based on the review comments from PR #$pr_number"
+        # Only push if new commits were made
+        local final_commit=$(git rev-parse HEAD)
+        if [ "$initial_commit" != "$final_commit" ]; then
+            # Ensure PR branch exists on fork (needed as base for AI PR)
+            push_to_fork "$repo_name" "$pr_branch"
+            
+            # Push the AI review branch and create a PR
+            push_and_create_pr "$repo_name" "$pr_branch" "This PR contains AI-generated implementations based on the review comments from PR #$pr_number"
+        fi
     fi
 }
 

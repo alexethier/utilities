@@ -3,8 +3,8 @@
 # This file is sourced by handler scripts that need to run cursor
 
 # Model configuration
-CURSOR_MODEL_DEFAULT="claude-sonnet-4.5"
-CURSOR_MODEL_THINKING="claude-opus-4"
+CURSOR_MODEL_DEFAULT="sonnet-4.5"
+CURSOR_MODEL_THINKING="opus-4.5-thinking"
 
 # Run cursor with prompt and optional improved thinking
 # Usage: run_cursor <prompt> [use_thinking]
