@@ -1,0 +1,74 @@
+#!/bin/bash
+
+PROMPT="$1"
+echo "🚀 Processing prompt: [$PROMPT]"
+
+# Track progress in real-time
+tool_count=0
+start_time=$(date +%s)
+
+cursor-agent -p --force --output-format stream-json --stream-partial-output \
+  "$PROMPT" | \
+  while IFS= read -r line; do
+    
+    type=$(echo "$line" | jq -r '.type // empty')
+    subtype=$(echo "$line" | jq -r '.subtype // empty')
+    
+    case "$type" in
+      "system")
+        if [ "$subtype" = "init" ]; then
+          model=$(echo "$line" | jq -r '.model // "unknown"')
+          echo "🤖 Using model: $model"
+        fi
+        ;;
+        
+      "assistant")
+        # Show complete assistant thinking (not incremental deltas)
+        model_call_id=$(echo "$line" | jq -r '.model_call_id // empty')
+        content=$(echo "$line" | jq -r '.message.content[0].text // empty')
+        
+        # Only show messages that have a model_call_id (complete thoughts)
+        if [ -n "$model_call_id" ] && [ -n "$content" ]; then
+          echo -e "\n💭 Assistant: $content"
+        fi
+        ;;
+
+      "tool_call")
+        if [ "$subtype" = "started" ]; then
+          tool_count=$((tool_count + 1))
+
+          # Extract tool information
+          if echo "$line" | jq -e '.tool_call.writeToolCall' > /dev/null 2>&1; then
+            path=$(echo "$line" | jq -r '.tool_call.writeToolCall.args.path // "unknown"')
+            echo -e "\n🔧 Tool #$tool_count: Creating $path"
+          elif echo "$line" | jq -e '.tool_call.readToolCall' > /dev/null 2>&1; then
+            path=$(echo "$line" | jq -r '.tool_call.readToolCall.args.path // "unknown"')
+            echo -e "\n📖 Tool #$tool_count: Reading $path"
+          fi
+
+        elif [ "$subtype" = "completed" ]; then
+          # Extract and show tool results
+          if echo "$line" | jq -e '.tool_call.writeToolCall.result.success' > /dev/null 2>&1; then
+            lines=$(echo "$line" | jq -r '.tool_call.writeToolCall.result.success.linesCreated // 0')
+            size=$(echo "$line" | jq -r '.tool_call.writeToolCall.result.success.fileSize // 0')
+            echo "   ✅ Created $lines lines ($size bytes)"
+          elif echo "$line" | jq -e '.tool_call.readToolCall.result.success' > /dev/null 2>&1; then
+            lines=$(echo "$line" | jq -r '.tool_call.readToolCall.result.success.totalLines // 0')
+            echo "   ✅ Read $lines lines"
+          fi
+        fi
+        ;;
+
+      "result")
+        duration=$(echo "$line" | jq -r '.duration_ms // 0')
+        end_time=$(date +%s)
+        total_time=$((end_time - start_time))
+
+        echo -e "\n\n🎯 Completed in ${duration}ms (${total_time}s total)"
+        echo "📊 Tools used: $tool_count"
+        ;;
+    esac
+  done
+
+echo "Completed Task"
+echo ""
