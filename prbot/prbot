@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/util/cursor_runner.sh"
 # Source the handler functions
 source "$SCRIPT_DIR/commenter/comment_handler.sh"
 source "$SCRIPT_DIR/conflict_fixer/cherry_pick_fixer.sh"
+source "$SCRIPT_DIR/tester/cache_manager.sh"
 source "$SCRIPT_DIR/tester/build_tester.sh"
 
 # Check for required environment variables

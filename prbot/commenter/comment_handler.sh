@@ -179,7 +179,7 @@ process_pr() {
     local comments=$(fetch_eligible_comments "$repo_owner" "$repo_name" "$pr_number")
     
     if [ -n "$comments" ]; then
-        local pr_branch=$(get_pr_branch "$repo_name" "$pr_number")
+        local pr_branch=$(get_pr_branch "$repo_owner" "$repo_name" "$pr_number")
         checkout_ai_review_branch "$repo_name" "$pr_branch"
 
         # Display PR header once
@@ -215,20 +215,42 @@ process_all_user_prs() {
     # Get all open PRs by the current user across all repositories (excluding archived repos)
     echo "🔍 Finding all open PRs (including drafts) by $CURRENT_USER across all repositories..."
     
-    # Get raw PR data and extract owner/name from full repository name
-    prs=$(gh search prs --author="$CURRENT_USER" --state=open archived:false --json number,title,repository,headRefName \
+    # Get raw PR data (headRefName not available in search, fetch separately)
+    local raw_prs=$(gh search prs --author="$CURRENT_USER" --state=open archived:false --json number,title,repository \
         --jq '.[] | 
             (.repository.nameWithOwner | split("/")) as $repo_parts |
             {
                 repo_owner: $repo_parts[0],
                 repo_name: $repo_parts[1],
                 number: .number,
-                title: .title,
-                branch: .headRefName
+                title: .title
             }')
-
-    # Filter out AI-generated branches (_ai_review, _ai_fix_conflicts)
-    prs=$(echo "$prs" | jq -c 'select(.branch | test("_ai_review$|_ai_fix_conflicts$") | not)')
+    
+    if [ -z "$raw_prs" ]; then
+        echo "ℹ️  No PRs found for user $CURRENT_USER"
+        return 0
+    fi
+    
+    # Fetch branch for each PR and filter out AI branches
+    # prs is JSONL format (one JSON object per line) that is iteratively built
+    local prs=""
+    while IFS= read -r pr; do
+        local repo_owner=$(echo "$pr" | jq -r '.repo_owner')
+        local repo_name=$(echo "$pr" | jq -r '.repo_name')
+        local pr_number=$(echo "$pr" | jq -r '.number')
+        
+        # Fetch branch name using common function
+        local branch=$(get_pr_branch "$repo_owner" "$repo_name" "$pr_number")
+        
+        # Skip AI-generated branches
+        if [[ "$branch" == *"_ai_review" ]] || [[ "$branch" == *"_ai_fix_conflicts" ]]; then
+            continue
+        fi
+        
+        # Add branch to PR data
+        local pr_with_branch=$(echo "$pr" | jq -c ". + {branch: \"$branch\"}")
+        prs="${prs}${pr_with_branch}"$'\n'
+    done <<< "$raw_prs"
     
     if [ -z "$prs" ]; then
         echo "ℹ️  No non-AI PRs found for user $CURRENT_USER"

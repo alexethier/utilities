@@ -9,11 +9,12 @@ get_ai_review_branch_name() {
 }
 
 # Get the PR branch name from PR number
-# Usage: get_pr_branch <repo_name> <pr_number>
+# Usage: get_pr_branch <repo_owner> <repo_name> <pr_number>
 get_pr_branch() {
-    local repo_name=$1
-    local pr_number=$2
-    gh api "repos/$PRBOT_REPO_OWNER/$repo_name/pulls/$pr_number" --jq '.head.ref'
+    local repo_owner=$1
+    local repo_name=$2
+    local pr_number=$3
+    gh api "repos/$repo_owner/$repo_name/pulls/$pr_number" --jq '.head.ref'
 }
 
 # Get the current GitHub user

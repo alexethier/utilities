@@ -256,10 +256,19 @@ test_pr() {
         return 0
     fi
     
-    local pr_branch=$(get_pr_branch "$repo_name" "$pr_number")
+    local pr_branch=$(get_pr_branch "$repo_owner" "$repo_name" "$pr_number")
     
     # Checkout the AI review branch for this PR
     checkout_ai_review_branch "$repo_name" "$pr_branch"
+    
+    # Get HEAD commit and check cache
+    local commit_id=$(git rev-parse HEAD)
+    echo "🔍 Checking cache for commit $commit_id..."
+    if cache_exists "$commit_id"; then
+        local state=$(cache_get_state "$commit_id")
+        echo "✅ Commit $commit_id already tested ($state), skipping"
+        return 0
+    fi
     
     # Display PR header
     echo ""
@@ -313,12 +322,15 @@ test_pr() {
         echo "ℹ️  No fixes needed - all stages passed on first try"
     fi
     
+    # Update cache with result
     if [ "$all_passed" = true ]; then
         echo ""
         echo "✅ All build stages passed!"
+        cache_create "$commit_id" "passed"
     else
         echo ""
         echo "⚠️  Some build stages failed after max retries"
+        cache_create "$commit_id" "fail"
     fi
 }
 
@@ -353,20 +365,42 @@ test_process_all_user_prs() {
     # Get all open PRs by the current user across all repositories (excluding archived repos)
     echo "🔍 Finding all open PRs (including drafts) by $CURRENT_USER across all repositories..."
     
-    # Get raw PR data and extract owner/name from full repository name
-    prs=$(gh search prs --author="$CURRENT_USER" --state=open archived:false --json number,title,repository,headRefName \
+    # Get raw PR data (headRefName not available in search, fetch separately)
+    local raw_prs=$(gh search prs --author="$CURRENT_USER" --state=open archived:false --json number,title,repository \
         --jq '.[] | 
             (.repository.nameWithOwner | split("/")) as $repo_parts |
             {
                 repo_owner: $repo_parts[0],
                 repo_name: $repo_parts[1],
                 number: .number,
-                title: .title,
-                branch: .headRefName
+                title: .title
             }')
-
-    # Filter out AI-generated branches (_ai_review, _ai_fix_conflicts)
-    prs=$(echo "$prs" | jq -c 'select(.branch | test("_ai_review$|_ai_fix_conflicts$") | not)')
+    
+    if [ -z "$raw_prs" ]; then
+        echo "ℹ️  No PRs found for user $CURRENT_USER"
+        return 0
+    fi
+    
+    # Fetch branch for each PR and filter out AI branches
+    # prs is JSONL format (one JSON object per line) that is iteratively built
+    local prs=""
+    while IFS= read -r pr; do
+        local repo_owner=$(echo "$pr" | jq -r '.repo_owner')
+        local repo_name=$(echo "$pr" | jq -r '.repo_name')
+        local pr_number=$(echo "$pr" | jq -r '.number')
+        
+        # Fetch branch name using common function
+        local branch=$(get_pr_branch "$repo_owner" "$repo_name" "$pr_number")
+        
+        # Skip AI-generated branches
+        if [[ "$branch" == *"_ai_review" ]] || [[ "$branch" == *"_ai_fix_conflicts" ]]; then
+            continue
+        fi
+        
+        # Add branch to PR data
+        local pr_with_branch=$(echo "$pr" | jq -c ". + {branch: \"$branch\"}")
+        prs="${prs}${pr_with_branch}"$'\n'
+    done <<< "$raw_prs"
     
     if [ -z "$prs" ]; then
         echo "ℹ️  No non-AI PRs found for user $CURRENT_USER"
@@ -406,6 +440,9 @@ test_process_single_branch_pr() {
 # Main action handler for test
 action_test() {
     local branch=$1
+    
+    # Initialize cache
+    cache_init
     
     # Create temp work directory for this run
     local workdir=$(_create_test_workdir)
