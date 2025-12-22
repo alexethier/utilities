@@ -54,13 +54,17 @@ run_cursor_isolated() {
     local pid_file="$runner_dir/pid"
     local exit_file="$runner_dir/exit"
     local log_file="$runner_dir/log"
+    local prompt_file="$runner_dir/prompt.txt"
     
     echo "📜 Runner dir: $runner_dir"
     echo "🤖 Model: $model"
     
+    # Write prompt to file to safely handle multiline and special characters
+    printf '%s' "$prompt" > "$prompt_file"
+    
     cat > "$runner_script" <<RUNNER_EOF
 #!/usr/bin/env bash --norc --noprofile
-$cursor_path -p "$prompt" -m "$model" | tee "$log_file" 2>&1
+$cursor_path -m "$model" -p "\$(cat '$prompt_file')" | tee "$log_file" 2>&1
 echo \$? > "$exit_file"
 RUNNER_EOF
     chmod +x "$runner_script"

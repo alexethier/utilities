@@ -85,25 +85,29 @@ EOF
 _get_stage_prompt() {
     local stage=$1
     local cmd_file=$2
+    local project_dir=$3
     
     case "$stage" in
         compile)
             cat <<EOF
-Analyze this project and determine the command to clean and compile it (skip tests).
+Analyze the project at: $project_dir
+Determine the command to clean and compile it (skip tests).
 Write ONLY the command (no explanation) to: $cmd_file
 Examples: "mvn clean compile -DskipTests", "gradle clean compileJava"
 EOF
             ;;
         test)
             cat <<EOF
-Analyze this project and determine the command to run unit tests only.
+Analyze the project at: $project_dir
+Determine the command to run unit tests only.
 Write ONLY the command (no explanation) to: $cmd_file
 Examples: "mvn test", "gradle test", "npm test"
 EOF
             ;;
         build)
             cat <<EOF
-Analyze this project and determine the command for a full build with all tests.
+Analyze the project at: $project_dir
+Determine the command for a full build with all tests.
 Write ONLY the command (no explanation) to: $cmd_file
 Examples: "mvn package", "gradle build", "npm run build && npm test"
 EOF
@@ -156,14 +160,16 @@ _validate_build_cmd() {
 }
 
 # Run a single build stage
-# Args: stage stage_name workdir
+# Args: stage stage_name workdir project_dir
 # Returns 0 if stage passed, 1 if failed after max retries
 _run_stage() {
     local stage=$1
     local stage_name=$2
     local workdir=$3
-    local cmd_file="$workdir/build_cmd.txt"
-    local output_file="$workdir/build_output.log"
+    local project_dir=$4
+    local timestamp=$(date +%s)
+    local cmd_file="$workdir/${timestamp}_${stage}_build_cmd.txt"
+    local output_file="$workdir/${timestamp}_${stage}_build_output.log"
     local retries=0
     local fixes_made=0
     
@@ -174,9 +180,8 @@ _run_stage() {
     
     # Get build command from AI
     echo "🤖 Asking AI for build command..."
-    rm -f "$cmd_file"
     
-    local cmd_prompt=$(_get_stage_prompt "$stage" "$cmd_file")
+    local cmd_prompt=$(_get_stage_prompt "$stage" "$cmd_file" "$project_dir")
     run_cursor "$cmd_prompt"
     
     if [ ! -f "$cmd_file" ]; then
@@ -185,7 +190,7 @@ _run_stage() {
     fi
     
     local build_cmd=$(cat "$cmd_file" | tr -d '\n')
-    echo "📋 Build command: $build_cmd"
+    echo "📋 Build command from $cmd_file: $build_cmd"
     
     # Validate command before executing
     _validate_build_cmd "$build_cmd"
@@ -196,7 +201,6 @@ _run_stage() {
         echo "🚀 Running build (attempt $((retries + 1))/$PRBOT_MAX_RETRIES)..."
         
         # Execute build command, capture output
-        rm -f "$output_file"
         eval "$build_cmd" > "$output_file" 2>&1
         local exit_code=$?
         
@@ -261,6 +265,9 @@ test_pr() {
     # Checkout the AI review branch for this PR
     checkout_ai_review_branch "$repo_name" "$pr_branch"
     
+    # Get project directory (we're now in the repo)
+    local project_dir=$(pwd)
+    
     # Get HEAD commit and check cache
     local commit_id=$(git rev-parse HEAD)
     echo "🔍 Checking cache for commit $commit_id..."
@@ -288,18 +295,18 @@ test_pr() {
     
     # Run stages sequentially - skip remaining stages if any stage fails
     # (no point running tests if compile fails, no point running full build if tests fail)
-    if ! _run_stage "compile" "Compile" "$workdir"; then
+    if ! _run_stage "compile" "Compile" "$workdir" "$project_dir"; then
         all_passed=false
     fi
     
     if [ "$all_passed" = true ]; then
-        if ! _run_stage "test" "Unit Tests" "$workdir"; then
+        if ! _run_stage "test" "Unit Tests" "$workdir" "$project_dir"; then
             all_passed=false
         fi
     fi
     
     if [ "$all_passed" = true ]; then
-        if ! _run_stage "build" "Full Build" "$workdir"; then
+        if ! _run_stage "build" "Full Build" "$workdir" "$project_dir"; then
             all_passed=false
         fi
     fi

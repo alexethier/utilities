@@ -130,6 +130,7 @@ You do not need to run tests, tests will be run in a later step.
 EOF
     )
 
+    # AI does not listen to prompt unless isolated - 12/22/2025
     run_cursor_isolated "$prompt" true
 
     # Commit any changes made by cursor
