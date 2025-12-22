@@ -89,9 +89,9 @@ _get_stage_prompt() {
     case "$stage" in
         compile)
             cat <<EOF
-Analyze this project and determine the command to compile it (skip tests).
+Analyze this project and determine the command to clean and compile it (skip tests).
 Write ONLY the command (no explanation) to: $cmd_file
-Examples: "mvn compile -DskipTests", "gradle compileJava", "npm run build"
+Examples: "mvn clean compile -DskipTests", "gradle clean compileJava"
 EOF
             ;;
         test)
