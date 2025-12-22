@@ -270,6 +270,9 @@ test_pr() {
         return 0
     fi
     
+    # Record that we're starting the build
+    cache_create "$commit_id" "started"
+    
     # Display PR header
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -326,11 +329,11 @@ test_pr() {
     if [ "$all_passed" = true ]; then
         echo ""
         echo "✅ All build stages passed!"
-        cache_create "$commit_id" "passed"
+        cache_update "$commit_id" "passed"
     else
         echo ""
         echo "⚠️  Some build stages failed after max retries"
-        cache_create "$commit_id" "fail"
+        cache_update "$commit_id" "fail"
     fi
 }
 

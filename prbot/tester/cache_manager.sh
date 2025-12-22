@@ -5,7 +5,11 @@
 # CSV Schema:
 #   commit_id,state,timestamp
 #
-# States: passed, fail
+# States:
+#   started - build started but no result yet (interrupted/crashed)
+#   passed  - build completed successfully
+#   fail    - build failed
+#
 # timestamp: Unix epoch time
 
 # Get the cache file path
