@@ -15,6 +15,8 @@ source "$SCRIPT_DIR/commenter/comment_handler.sh"
 source "$SCRIPT_DIR/conflict_fixer/cherry_pick_fixer.sh"
 source "$SCRIPT_DIR/tester/cache_manager.sh"
 source "$SCRIPT_DIR/tester/build_tester.sh"
+source "$SCRIPT_DIR/integrations/jira/jira"
+source "$SCRIPT_DIR/jira_generator/jira_generator.sh"
 
 # Check for required environment variables
 missing_vars=()
@@ -59,6 +61,7 @@ Actions:
   review        Process PR review comments with laugh reactions
   fix_conflict  Fix conflicts by cherry-picking PR commits onto main
   test          Run builds and fix errors with AI (compile, unit tests, full build)
+  jira          Implement a Jira ticket using AI
 
 Global Options:
   -l, --loop      Run continuously, checking every 15 minutes
@@ -203,6 +206,34 @@ run_action() {
             done
 
             action_test "$BRANCH"
+            ;;
+        jira)
+            # Jira-specific options
+            TICKET=""
+
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -h|--help)
+                        show_jira_help
+                        exit 0
+                        ;;
+                    -t|--ticket)
+                        if [ -z "$2" ]; then
+                            echo "Error: -t/--ticket requires a ticket ID"
+                            exit 1
+                        fi
+                        TICKET="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Error: Unknown option '$1' for jira action"
+                        echo "Run '$0 jira --help' for usage."
+                        exit 1
+                        ;;
+                esac
+            done
+
+            action_jira "$TICKET"
             ;;
         all)
             echo "💬 Running actions on branch $BRANCH..."

@@ -1,0 +1,150 @@
+#!/bin/bash
+# Jira API - Source this file to use jira functions
+# 
+# Required environment variables:
+#   PRBOT_JIRA_TOKEN    - Jira API token (create at https://id.atlassian.com/manage-profile/security/api-tokens)
+#   PRBOT_JIRA_BASE_URL - Base URL of your Jira instance (e.g., https://yourcompany.atlassian.net)
+#   PRBOT_JIRA_EMAIL    - Your Jira account email
+#
+# Usage:
+#   source /path/to/jira
+#   result=$(jira_get_ticket "PROJ-123")
+
+# Validate token first - fail fast
+if [ -z "$PRBOT_JIRA_TOKEN" ]; then
+    echo "❌ PRBOT_JIRA_TOKEN is not set" >&2
+    echo "   Create a token at: https://id.atlassian.com/manage-profile/security/api-tokens" >&2
+    exit 1
+fi
+
+if [ -z "$PRBOT_JIRA_BASE_URL" ]; then
+    echo "❌ PRBOT_JIRA_BASE_URL is not set" >&2
+    exit 1
+fi
+
+if [ -z "$PRBOT_JIRA_EMAIL" ]; then
+    echo "❌ PRBOT_JIRA_EMAIL is not set" >&2
+    exit 1
+fi
+
+# Make authenticated request to Jira API (private)
+# Returns: JSON body on success, prints error and returns 1 on failure
+_jira_request() {
+    local endpoint=$1
+    local url="${PRBOT_JIRA_BASE_URL}/rest/api/3/${endpoint}"
+    
+    local raw
+    raw=$(curl -s -w "|||%{http_code}" -X GET \
+        -H "Authorization: Basic $(echo -n "$PRBOT_JIRA_EMAIL:$PRBOT_JIRA_TOKEN" | base64)" \
+        -H "Content-Type: application/json" \
+        "$url")
+    
+    local body="${raw%|||*}"
+    local code="${raw##*|||}"
+    
+    if [[ ! "$code" =~ ^2[0-9][0-9]$ ]]; then
+        echo "❌ Jira API error" >&2
+        echo "   Endpoint: $endpoint" >&2
+        echo "   HTTP Status: $code" >&2
+        if echo "$body" | grep -q '"errorMessages"'; then
+            echo "   Message: $(echo "$body" | jq -r '.errorMessages[0]' 2>/dev/null)" >&2
+        else
+            echo "   Response: $body" >&2
+        fi
+        return 1
+    fi
+    
+    echo "$body"
+}
+
+# Get ticket title, summary, and description
+# Args: ticket_id
+# Returns: "TICKET-ID: Summary\n\nDescription text"
+jira_get_ticket() {
+    local ticket_id=$1
+    
+    if [ -z "$ticket_id" ]; then
+        echo "❌ jira_get_ticket requires ticket_id" >&2
+        return 1
+    fi
+    
+    local body
+    body=$(_jira_request "issue/$ticket_id") || return 1
+    
+    local key=$(echo "$body" | jq -r '.key')
+    local summary=$(echo "$body" | jq -r '.fields.summary')
+    # Extract text from Atlassian Document Format (ADF) description
+    local description=$(echo "$body" | jq -r '
+        .fields.description.content[]? | 
+        recurse(.content[]?) | 
+        select(.type == "text") | 
+        .text
+    ' 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')
+    
+    echo "$key: $summary"
+    if [ -n "$description" ]; then
+        echo ""
+        echo "$description"
+    fi
+}
+
+# Check if authentication is working
+# Returns: 0 if auth works, 1 if not
+jira_auth_check() {
+    local body
+    body=$(_jira_request "myself") || return 1
+    
+    local display_name=$(echo "$body" | jq -r '.displayName // "Unknown"')
+    local email=$(echo "$body" | jq -r '.emailAddress // "Unknown"')
+    
+    echo "✅ Authenticated as: $display_name ($email)"
+    return 0
+}
+
+# Show help
+_jira_help() {
+    echo "Jira CLI - Fetch ticket details"
+    echo ""
+    echo "Usage: jira [-v] <command|TICKET-ID>"
+    echo ""
+    echo "Commands:"
+    echo "  auth          Check if authentication is working"
+    echo "  <TICKET-ID>   Fetch ticket details"
+    echo ""
+    echo "Options:"
+    echo "  -v            Verbose mode (enables debug output)"
+    echo "  -h, --help    Show this help"
+    echo ""
+    echo "Returns: TICKET-ID: Summary"
+    echo ""
+    echo "Required environment variables:"
+    echo "  PRBOT_JIRA_TOKEN    - API token"
+    echo "  PRBOT_JIRA_BASE_URL - Base URL (e.g., https://company.atlassian.net)"
+    echo "  PRBOT_JIRA_EMAIL    - Your Jira account email"
+    echo ""
+    echo "Examples:"
+    echo "  jira PROJ-123"
+    echo "  jira -v PROJ-123"
+}
+
+# CLI entry point - only runs when executed directly (not sourced)
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Check for -v flag first
+    if [ "${1:-}" = "-v" ]; then
+        set -x
+        shift
+    fi
+    
+    case "${1:-}" in
+        -h|--help|help|"")
+            _jira_help
+            exit 0
+            ;;
+        auth)
+            jira_auth_check
+            ;;
+        *)
+            jira_get_ticket "$1"
+            ;;
+    esac
+fi
