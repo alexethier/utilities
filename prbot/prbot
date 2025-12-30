@@ -12,6 +12,7 @@ source "$SCRIPT_DIR/util/cursor_runner.sh"
 
 # Source the handler functions
 source "$SCRIPT_DIR/commenter/comment_handler.sh"
+source "$SCRIPT_DIR/commenter/fork_comment_handler.sh"
 source "$SCRIPT_DIR/conflict_fixer/cherry_pick_fixer.sh"
 source "$SCRIPT_DIR/tester/cache_manager.sh"
 source "$SCRIPT_DIR/tester/build_tester.sh"
@@ -58,7 +59,8 @@ Required Environment Variables:
   PRBOT_FORK_PREFIX  Prefix for fork repo names (e.g., "yourprefix-")
 
 Actions:
-  review        Process PR review comments with laugh reactions
+  review        Process PR review comments with laugh reactions (main repo PRs)
+  fork_review   Process PR review comments for PRs in fork repos
   fix_conflict  Fix conflicts by cherry-picking PR commits onto main
   test          Run builds and fix errors with AI (compile, unit tests, full build)
   jira          Implement a Jira ticket using AI
@@ -150,6 +152,34 @@ run_action() {
             done
 
             action_review "$BRANCH"
+            ;;
+        fork_review)
+            # Fork review-specific options
+            BRANCH=""
+
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -h|--help)
+                        show_fork_review_help
+                        exit 0
+                        ;;
+                    -b|--branch)
+                        if [ -z "$2" ]; then
+                            echo "Error: -b/--branch requires a branch name"
+                            exit 1
+                        fi
+                        BRANCH="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Error: Unknown option '$1' for fork_review action"
+                        echo "Run '$0 fork_review --help' for usage."
+                        exit 1
+                        ;;
+                esac
+            done
+
+            action_fork_review "$BRANCH"
             ;;
         fix_conflict)
             # Fix conflict-specific options

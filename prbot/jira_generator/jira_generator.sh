@@ -19,24 +19,24 @@ Please implement this ticket in the current codebase. Follow these guidelines:
 5. Do not make changes beyond what the ticket requires
 
 Start by exploring the codebase to understand its structure, then implement the required changes.
+Don't run tests or build the project, that will happen in a later step.
 EOF
 }
 
 # Push branch to fork and create draft PR
-# Args: fork_repo branch_name ticket_id ticket_details
+# Args: fork_repo ticket_id ticket_details
 _push_and_create_draft_pr() {
     local fork_repo="$1"
-    local branch_name="$2"
-    local ticket_id="$3"
-    local ticket_details="$4"
+    local ticket_id="$2"
+    local ticket_details="$3"
     
     # Push to fork
-    echo "📤 Pushing $branch_name to fork..."
-    git push -u fork "$branch_name" --force
+    echo "📤 Pushing $ticket_id to fork..."
+    git push -u fork "$ticket_id" --force
     
     # Check if PR already exists
     echo "🔍 Checking if PR already exists..."
-    local existing_pr=$(gh pr list --repo "$PRBOT_FORK_OWNER/$fork_repo" --head "$branch_name" --base "main" --json number --jq '.[0].number')
+    local existing_pr=$(gh pr list --repo "$PRBOT_FORK_OWNER/$fork_repo" --head "$ticket_id" --base "main" --json number --jq '.[0].number')
     
     if [ -n "$existing_pr" ]; then
         echo "✅ PR already exists: #$existing_pr"
@@ -46,7 +46,7 @@ _push_and_create_draft_pr() {
         local title="$ticket_id: $(echo "$ticket_details" | head -1 | cut -d: -f2- | xargs)"
         gh pr create --repo "$PRBOT_FORK_OWNER/$fork_repo" \
             --base "main" \
-            --head "$branch_name" \
+            --head "$ticket_id" \
             --title "$title" \
             --body "Implements $ticket_id
 
@@ -70,9 +70,6 @@ jira_implement() {
     local repo_name="$REPO_NAME"
     local fork_repo="${PRBOT_FORK_PREFIX}${repo_name}"
     
-    # Convert ticket ID to lowercase for branch name
-    local branch_name=$(echo "$ticket_id" | tr '[:upper:]' '[:lower:]')
-    
     echo "🎫 Loading Jira ticket: $ticket_id"
     
     # Get ticket details
@@ -91,8 +88,8 @@ jira_implement() {
     echo "🔄 Fetching latest from origin..."
     git fetch origin main
     
-    echo "🌿 Creating branch: $branch_name"
-    git checkout -B "$branch_name" origin/main
+    echo "🌿 Creating branch: $ticket_id"
+    git checkout -B "$ticket_id" origin/main
     
     # Record initial commit
     local initial_commit=$(git rev-parse HEAD)
@@ -106,14 +103,21 @@ jira_implement() {
     # Use isolated cursor with thinking model
     run_cursor_isolated "$prompt" "true"
     
-    # Check if any changes were made
-    local final_commit=$(git rev-parse HEAD)
-    if [ "$initial_commit" = "$final_commit" ]; then
-        echo "ℹ️  No changes were made by AI"
-        return 0
+    # Check for uncommitted changes and commit them
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "📝 Committing uncommitted changes..."
+        git add -A
+        git commit -m "$ticket_id: AI implementation"
     fi
     
-    _push_and_create_draft_pr "$fork_repo" "$branch_name" "$ticket_id" "$ticket_details"
+    # Check if any commits were made
+    local final_commit=$(git rev-parse HEAD)
+    if [ "$initial_commit" = "$final_commit" ]; then
+        echo "❌ No changes were made by AI" >&2
+        return 1
+    fi
+    
+    _push_and_create_draft_pr "$fork_repo" "$ticket_id" "$ticket_details"
     
     echo "✅ Done!"
 }
