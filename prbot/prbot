@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/util/cursor_runner.sh"
 # Source the handler functions
 source "$SCRIPT_DIR/commenter/comment_handler.sh"
 source "$SCRIPT_DIR/commenter/fork_comment_handler.sh"
+source "$SCRIPT_DIR/comment_copier/comment_copier.sh"
 source "$SCRIPT_DIR/conflict_fixer/cherry_pick_fixer.sh"
 source "$SCRIPT_DIR/tester/cache_manager.sh"
 source "$SCRIPT_DIR/tester/build_tester.sh"
@@ -64,6 +65,7 @@ Actions:
   fix_conflict  Fix conflicts by cherry-picking PR commits onto main
   test          Run builds and fix errors with AI (compile, unit tests, full build)
   jira          Implement a Jira ticket using AI
+  copy_comments Copy PR comments from origin to fork
 
 Global Options:
   -l, --loop      Run continuously, checking every 15 minutes
@@ -264,6 +266,34 @@ run_action() {
             done
 
             action_jira "$TICKET"
+            ;;
+        copy_comments)
+            # Copy comments-specific options
+            BRANCH=""
+
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -h|--help)
+                        show_copy_comments_help
+                        exit 0
+                        ;;
+                    -b|--branch)
+                        if [ -z "$2" ]; then
+                            echo "Error: -b/--branch requires a branch name"
+                            exit 1
+                        fi
+                        BRANCH="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Error: Unknown option '$1' for copy_comments action"
+                        echo "Run '$0 copy_comments --help' for usage."
+                        exit 1
+                        ;;
+                esac
+            done
+
+            action_copy_comments "$BRANCH"
             ;;
         all)
             echo "💬 Running actions on branch $BRANCH..."
