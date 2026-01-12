@@ -1,5 +1,6 @@
 """Fork syncer - syncs branches and PRs from source repo to target."""
 
+from prbot.actions.fork_syncer.comment_syncer import CommentSyncer
 from prbot.config import Config
 from prbot.services.git.git_repo import GitRepo
 from prbot.services.github.github_api import GitHubApi, PullRequest
@@ -18,6 +19,7 @@ class ForkSyncer:
         self.target_owner, self.target_repo = self.git.parse_github_url(
             self.git.get_remote_url("origin")
         )
+        self.comment_syncer = CommentSyncer(github)
     
     def sync(self, source_owner: str, source_repo: str, branch: str | None = None) -> None:
         """Main entry point - sync branches and/or PRs from source to target.
@@ -147,8 +149,10 @@ class ForkSyncer:
             self.target_owner, self.target_repo, pr.head_branch, pr.base_branch
         )
         
+        target_pr_number = None
         if existing_pr:
             print(f"   ✅ PR already exists: #{existing_pr}")
+            target_pr_number = existing_pr
         else:
             # Create PR in target
             try:
@@ -161,8 +165,19 @@ class ForkSyncer:
                     body=f"Synced from {pr.repo_owner}/{pr.repo_name} PR #{pr.number}\n\nOriginal: https://github.com/{pr.repo_owner}/{pr.repo_name}/pull/{pr.number}",
                 )
                 print(f"   ✅ Created PR #{new_pr}")
+                target_pr_number = new_pr
             except Exception as e:
                 print(f"   ⚠️ Failed to create PR: {e}")
+        
+        # Sync comments
+        if target_pr_number:
+            print(f"   💬 Syncing comments...")
+            synced = self.comment_syncer.sync_comments(
+                pr.repo_owner, pr.repo_name, pr.number,
+                self.target_owner, self.target_repo, target_pr_number,
+            )
+            if synced:
+                print(f"   ✅ Synced {synced} comment(s)")
     
     def _add_source_remote(self, source_owner: str, source_repo: str) -> str:
         """Add source repo as a git remote. Returns remote name."""
