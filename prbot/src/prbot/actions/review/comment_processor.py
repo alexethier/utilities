@@ -140,13 +140,16 @@ You do not need to run tests, tests will be run in a later step.
             print(f"✅ PR already exists: #{existing_pr}")
             print(f"🔗 https://github.com/{pr.repo_owner}/{pr.repo_name}/pull/{existing_pr}")
         else:
+            branch_snippet = pr.head_branch[:10] + ("..." if len(pr.head_branch) > 10 else "")
+            title_snippet = pr.title[:20] + ("..." if len(pr.title) > 20 else "")
+            
             new_pr = self.github.create_pr(
                 owner=pr.repo_owner,
                 repo=pr.repo_name,
                 head=ai_branch,
                 base=pr.head_branch,
-                title=f"AI implementations for PR #{pr.number}",
-                body=f"This PR contains AI-generated implementations based on the review comments from PR #{pr.number}",
+                title=f"AI: {branch_snippet} - {title_snippet} (PR #{pr.number})",
+                body=f"AI-generated implementations for review comments.\n\nOriginal PR: #{pr.number}\nBranch: `{pr.head_branch}`\nTitle: {pr.title}",
             )
             print(f"✅ Created PR #{new_pr}")
             print(f"🔗 https://github.com/{pr.repo_owner}/{pr.repo_name}/pull/{new_pr}")

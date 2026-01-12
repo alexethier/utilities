@@ -15,104 +15,73 @@ def run_review(args: argparse.Namespace, config: Config) -> None:
     """Run the review action."""
     from prbot.actions.review.comment_processor import CommentProcessor
     
+    # Parse repo
+    if "/" not in args.repo:
+        print(f"❌ Invalid repo format: {args.repo}")
+        print("   Expected: owner/repo (e.g., snowflakedb/openflow-core)")
+        sys.exit(1)
+    repo_owner, repo_name = args.repo.split("/", 1)
+    
     github = GitHubApi(config.github_token)
     cursor = CursorRunner(config)
     
-    if args.branch:
-        # Get repo info from current directory
-        git = GitRepo(Path.cwd())
-        owner, repo_name = git.parse_github_url(git.get_remote_url())
-        
-        pr = github.get_pr_by_branch(owner, repo_name, args.branch)
-        if not pr:
-            print(f"No open PR found for branch '{args.branch}'")
-            return
-        
-        # Ensure repo in workdir
-        repo_path = config.workdir / owner / repo_name
-        git = GitRepo.ensure(f"https://github.com/{owner}/{repo_name}.git", repo_path)
-        
-        processor = CommentProcessor(git, github, cursor, config)
-        processor.process_pr(pr)
-    else:
-        # Process all user's PRs
-        user = github.get_current_user()
-        print(f"🔍 Finding open PRs by {user}...")
-        
-        prs = github.list_user_prs(user)
-        if not prs:
-            print("No open PRs found")
-            return
-        
-        for pr in prs:
-            repo_path = config.workdir / pr.repo_owner / pr.repo_name
-            git = GitRepo.ensure(
-                f"https://github.com/{pr.repo_owner}/{pr.repo_name}.git",
-                repo_path
-            )
-            
-            processor = CommentProcessor(git, github, cursor, config)
-            processor.process_pr(pr)
+    print(f"🔍 Finding PR for {repo_owner}/{repo_name} branch '{args.branch}'...")
+    pr = github.get_pr_by_branch(repo_owner, repo_name, args.branch)
+    if not pr:
+        print(f"No open PR found for branch '{args.branch}'")
+        return
+    
+    repo_path = config.workdir / repo_owner / repo_name
+    git = GitRepo.ensure(f"https://github.com/{repo_owner}/{repo_name}.git", repo_path)
+    
+    processor = CommentProcessor(git, github, cursor, config)
+    processor.process_pr(pr)
 
 
 def run_test(args: argparse.Namespace, config: Config) -> None:
     """Run the test action."""
     from prbot.actions.test.build_fixer import BuildFixer
     
+    # Parse repo
+    if "/" not in args.repo:
+        print(f"❌ Invalid repo format: {args.repo}")
+        print("   Expected: owner/repo (e.g., snowflakedb/openflow-core)")
+        sys.exit(1)
+    repo_owner, repo_name = args.repo.split("/", 1)
+    
     github = GitHubApi(config.github_token)
     cursor = CursorRunner(config)
     
-    if args.branch:
-        # Get repo info from current directory
-        git = GitRepo(Path.cwd())
-        owner, repo_name = git.parse_github_url(git.get_remote_url())
-        
-        pr = github.get_pr_by_branch(owner, repo_name, args.branch)
-        if not pr:
-            print(f"No open PR found for branch '{args.branch}'")
-            return
-        
-        # Ensure repo in workdir
-        repo_path = config.workdir / owner / repo_name
-        git = GitRepo.ensure(f"https://github.com/{owner}/{repo_name}.git", repo_path)
-        
-        fixer = BuildFixer(git, github, cursor, config)
-        fixer.test_pr(pr)
-    else:
-        # Process all user's PRs
-        user = github.get_current_user()
-        print(f"🔍 Finding open PRs by {user}...")
-        
-        prs = github.list_user_prs(user)
-        if not prs:
-            print("No open PRs found")
-            return
-        
-        for pr in prs:
-            repo_path = config.workdir / pr.repo_owner / pr.repo_name
-            git = GitRepo.ensure(
-                f"https://github.com/{pr.repo_owner}/{pr.repo_name}.git",
-                repo_path
-            )
-            
-            fixer = BuildFixer(git, github, cursor, config)
-            fixer.test_pr(pr)
+    print(f"🔍 Finding PR for {repo_owner}/{repo_name} branch '{args.branch}'...")
+    pr = github.get_pr_by_branch(repo_owner, repo_name, args.branch)
+    if not pr:
+        print(f"No open PR found for branch '{args.branch}'")
+        return
+    
+    repo_path = config.workdir / repo_owner / repo_name
+    git = GitRepo.ensure(f"https://github.com/{repo_owner}/{repo_name}.git", repo_path)
+    
+    fixer = BuildFixer(git, github, cursor, config)
+    fixer.test_pr(pr)
 
 
 def run_fix_conflict(args: argparse.Namespace, config: Config) -> None:
     """Run the fix_conflict action."""
     from prbot.actions.conflict.cherry_pick_fixer import CherryPickFixer
     
-    # Get repo info from current directory
-    git = GitRepo(Path.cwd())
-    owner, repo_name = git.parse_github_url(git.get_remote_url())
+    # Parse repo
+    if "/" not in args.repo:
+        print(f"❌ Invalid repo format: {args.repo}")
+        print("   Expected: owner/repo (e.g., snowflakedb/openflow-core)")
+        sys.exit(1)
+    repo_owner, repo_name = args.repo.split("/", 1)
     
     github = GitHubApi(config.github_token)
     cursor = CursorRunner(config)
     
     # Ensure repo in workdir
-    repo_path = config.workdir / owner / repo_name
-    git = GitRepo.ensure(f"https://github.com/{owner}/{repo_name}.git", repo_path)
+    repo_path = config.workdir / repo_owner / repo_name
+    git = GitRepo.ensure(f"https://github.com/{repo_owner}/{repo_name}.git", repo_path)
     
     fixer = CherryPickFixer(git, github, cursor, config)
     fixer.fix_conflicts(args.branch)
@@ -158,14 +127,17 @@ def main() -> None:
     
     # review
     review_parser = subparsers.add_parser("review", help="Process PR review comments")
-    review_parser.add_argument("-b", "--branch", help="Only process PR for this branch")
+    review_parser.add_argument("-r", "--repo", required=True, help="Repo (owner/repo, e.g., snowflakedb/openflow-core)")
+    review_parser.add_argument("-b", "--branch", required=True, help="PR branch to process")
     
     # test
     test_parser = subparsers.add_parser("test", help="Run builds and fix errors")
-    test_parser.add_argument("-b", "--branch", help="Only test PR for this branch")
+    test_parser.add_argument("-r", "--repo", required=True, help="Repo (owner/repo, e.g., snowflakedb/openflow-core)")
+    test_parser.add_argument("-b", "--branch", required=True, help="PR branch to test")
     
     # fix_conflict
     conflict_parser = subparsers.add_parser("fix_conflict", help="Fix merge conflicts")
+    conflict_parser.add_argument("-r", "--repo", required=True, help="Repo (owner/repo, e.g., snowflakedb/openflow-core)")
     conflict_parser.add_argument("-b", "--branch", required=True, help="PR branch to fix")
     
     # fork_sync
