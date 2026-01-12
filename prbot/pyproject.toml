@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "prbot"
+version = "0.1.0"
+description = "PR management bot with AI-powered code changes"
+authors = []
+readme = "README.md"
+packages = [{include = "prbot", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+PyGithub = "^2.1"
+GitPython = "^3.1"
+
+[tool.poetry.scripts]
+prbot = "prbot.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
