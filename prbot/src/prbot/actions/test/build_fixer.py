@@ -57,11 +57,15 @@ class BuildFixer:
         
         # Check if PR already passed
         status = self.github.get_pr_check_status(pr.repo_owner, pr.repo_name, pr.number)
+        total_checks = status['passed'] + status['failed'] + status['pending']
         print(f"   Checks: {status['passed']} passed, {status['failed']} failed, {status['pending']} pending")
         
-        if status["failed"] == 0 and status["pending"] == 0:
+        if total_checks > 0 and status["failed"] == 0 and status["pending"] == 0:
             print("   ✅ All checks passed, skipping")
             return True
+        
+        if total_checks == 0:
+            print("   ⚠️ No CI checks found on this repo")
         
         # Checkout AI branch
         ai_branch = f"{pr.head_branch}{self.AI_BRANCH_SUFFIX}"

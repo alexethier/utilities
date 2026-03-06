@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from github import Github
+from github import Github, UnknownObjectException
 
 
 @dataclass
@@ -53,7 +53,14 @@ class GitHubApi:
     
     def get_pr_by_branch(self, owner: str, repo: str, branch: str) -> PullRequest | None:
         """Find PR with given branch as head. Returns None if not found."""
-        gh_repo = self.github.get_repo(f"{owner}/{repo}")
+        try:
+            gh_repo = self.github.get_repo(f"{owner}/{repo}")
+        except UnknownObjectException as e:
+            raise RuntimeError(
+                f"Repository not found: {owner}/{repo}\n"
+                f"Your token may not have access. Try:\n"
+                f"  export PRBOT_GITHUB_TOKEN=$(gh auth token)"
+            ) from e
         prs = gh_repo.get_pulls(state="open", head=f"{owner}:{branch}")
         for pr in prs:
             return PullRequest(

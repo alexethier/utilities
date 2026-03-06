@@ -18,7 +18,7 @@ def run_review(args: argparse.Namespace, config: Config) -> None:
     # Parse repo
     if "/" not in args.repo:
         print(f"❌ Invalid repo format: {args.repo}")
-        print("   Expected: owner/repo (e.g., snowflakedb/openflow-core)")
+        print("   Expected: org/repo (e.g., myorg/myrepo)")
         sys.exit(1)
     repo_owner, repo_name = args.repo.split("/", 1)
     
@@ -45,7 +45,7 @@ def run_test(args: argparse.Namespace, config: Config) -> None:
     # Parse repo
     if "/" not in args.repo:
         print(f"❌ Invalid repo format: {args.repo}")
-        print("   Expected: owner/repo (e.g., snowflakedb/openflow-core)")
+        print("   Expected: org/repo (e.g., myorg/myrepo)")
         sys.exit(1)
     repo_owner, repo_name = args.repo.split("/", 1)
     
@@ -72,7 +72,7 @@ def run_fix_conflict(args: argparse.Namespace, config: Config) -> None:
     # Parse repo
     if "/" not in args.repo:
         print(f"❌ Invalid repo format: {args.repo}")
-        print("   Expected: owner/repo (e.g., snowflakedb/openflow-core)")
+        print("   Expected: org/repo (e.g., myorg/myrepo)")
         sys.exit(1)
     repo_owner, repo_name = args.repo.split("/", 1)
     
@@ -92,15 +92,14 @@ def run_fork_sync(args: argparse.Namespace, config: Config) -> None:
     from prbot.actions.fork_syncer.fork_syncer import ForkSyncer
     
     # Parse source repo
-    if "/" not in args.source:
-        print(f"❌ Invalid source format: {args.source}")
-        print("   Expected: owner/repo (e.g., apache/kafka)")
+    if "/" not in args.repo:
+        print(f"❌ Invalid repo format: {args.repo}")
+        print("   Expected: org/repo (e.g., myorg/myrepo)")
         sys.exit(1)
     
-    source_owner, source_repo = args.source.split("/", 1)
+    source_owner, source_repo = args.repo.split("/", 1)
     
     # Target is derived: PRBOT_REPO_OWNER / PRBOT_FORK_PREFIX + source_repo_name
-    # e.g., source apache/kafka -> target myuser/aethier-kafka
     target_owner = config.repo_owner
     target_repo = f"{config.fork_prefix}{source_repo}"
     
@@ -127,22 +126,22 @@ def main() -> None:
     
     # review
     review_parser = subparsers.add_parser("review", help="Process PR review comments")
-    review_parser.add_argument("-r", "--repo", required=True, help="Repo (owner/repo, e.g., snowflakedb/openflow-core)")
+    review_parser.add_argument("-r", "--repo", required=True, help="Target repo (e.g., org/repo)")
     review_parser.add_argument("-b", "--branch", required=True, help="PR branch to process")
     
     # test
     test_parser = subparsers.add_parser("test", help="Run builds and fix errors")
-    test_parser.add_argument("-r", "--repo", required=True, help="Repo (owner/repo, e.g., snowflakedb/openflow-core)")
+    test_parser.add_argument("-r", "--repo", required=True, help="Target repo (e.g., org/repo)")
     test_parser.add_argument("-b", "--branch", required=True, help="PR branch to test")
     
     # fix_conflict
     conflict_parser = subparsers.add_parser("fix_conflict", help="Fix merge conflicts")
-    conflict_parser.add_argument("-r", "--repo", required=True, help="Repo (owner/repo, e.g., snowflakedb/openflow-core)")
+    conflict_parser.add_argument("-r", "--repo", required=True, help="Target repo (e.g., org/repo)")
     conflict_parser.add_argument("-b", "--branch", required=True, help="PR branch to fix")
     
     # fork_sync
     fork_sync_parser = subparsers.add_parser("fork_sync", help="Sync branches/PRs from source repo to your fork")
-    fork_sync_parser.add_argument("--source", "-s", required=True, help="Source repo (owner/repo, e.g., apache/kafka)")
+    fork_sync_parser.add_argument("-r", "--repo", required=True, help="Source repo to sync from (e.g., org/repo)")
     fork_sync_parser.add_argument("-b", "--branch", help="Only sync this branch (otherwise syncs all your PRs)")
     
     args = parser.parse_args()
