@@ -43,6 +43,9 @@ normalize_image_reference() {
 }
 
 clean() {
+  echo "Pruning images"
+  $DOCKER_PATH image prune -f
+  echo "Cleaning images"
   $DOCKER_PATH images  | tr -s ' '  | grep "<none> <none>" | cut -d' ' -f3  | xargs -I {} $DOCKER_PATH rmi {} 
 }
 
@@ -50,6 +53,9 @@ clean_all() {
 
   tmpfile=$(mktemp)
   tmpout=$(mktemp)
+  echo "Pruning images"
+  $DOCKER_PATH image prune -f
+  echo "Cleaning images"
   $DOCKER_PATH images --format '{{.Repository}} {{.Tag}}' > "$tmpfile"
 
   TMPFILE="$tmpfile" TMPOUT="$tmpout" python3 - <<EOF
@@ -352,11 +358,27 @@ list() {
 }
 
 remove() {
-  local search_string="$1"
+  local force=false
+  local search_string=""
+  
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f|--force)
+        force=true
+        shift
+        ;;
+      *)
+        search_string="$1"
+        shift
+        ;;
+    esac
+  done
   
   if [ -z "$search_string" ]; then
-    echo "Usage: docker remove <search_string>"
+    echo "Usage: docker remove [-f] <search_string>"
     echo "Searches for images by name or ID and removes all matching images"
+    echo "  -f, --force    Skip confirmation prompt"
     return 1
   fi
   
@@ -398,13 +420,15 @@ remove() {
   echo "$images_to_remove" | sed 's/^TAG:/  /; s/^ID:/  (by ID) /'
   echo ""
   
-  # Wait for user confirmation
-  read -p "Proceed with removal? (y): " confirmation
-  if [[ -n "$confirmation" && ! "$confirmation" =~ ^([yY]|[yY][eE][sS])$ ]]; then
-    echo "Removal cancelled"
-    return 0
+  # Wait for user confirmation (unless -f flag was passed)
+  if [ "$force" = false ]; then
+    read -p "Proceed with removal? (y): " confirmation
+    if [[ -n "$confirmation" && ! "$confirmation" =~ ^([yY]|[yY][eE][sS])$ ]]; then
+      echo "Removal cancelled"
+      return 0
+    fi
+    echo ""
   fi
-  echo ""
   
   # Remove all images
   echo "$images_to_remove" | while read removal_spec; do
@@ -434,7 +458,8 @@ elif [[ "$1" == "pull" ]]; then
 elif [[ "$1" == "list" ]]; then
   list "$2"
 elif [[ "$1" == "remove" || "$1" == "delete" ]]; then
-  remove "$2"
+  shift
+  remove "$@"
 elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "Docker Wrapper - Custom commands for docker"
   echo "Using docker binary: $DOCKER_PATH"
@@ -448,7 +473,8 @@ elif [[ "$1" == "-h" || "$1" == "--help" ]]; then
   echo "  push <tag>                 - Push image, skip if already pushed (tracked in ~/.aedev/docker_pushes.txt)"
   echo "  pull <tag>                 - Pull image and register the pull (tracked in ~/.aedev/docker_pulls.txt)"
   echo "  list [string]              - List images, optionally filtered by grep pattern"
-  echo "  remove|delete <string>     - Remove images matching name or ID"
+  echo "  remove|delete [-f] <string> - Remove images matching name or ID"
+  echo "                               -f: skip confirmation prompt"
   echo "                               Matches by: exact ID, full repo name, or basename"
   echo "                               Examples: 'ingress-nginx/controller'"
   echo ""
