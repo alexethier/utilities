@@ -4,6 +4,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_CURSOR_MODEL = "claude-4.6-opus-high"
+DEFAULT_CURSOR_THINKING_MODEL = "claude-4.6-opus-high-thinking"
+
 
 @dataclass
 class Config:
@@ -13,10 +16,8 @@ class Config:
     repo_owner: str            # PRBOT_REPO_OWNER
     github_token: str          # PRBOT_GITHUB_TOKEN
     fork_prefix: str           # PRBOT_FORK_PREFIX (optional, e.g., "aethier-")
-    
-    # Cursor model settings
-    cursor_model_default: str = "sonnet-4.5"
-    cursor_model_thinking: str = "opus-4.5-thinking"
+    cursor_model_default: str
+    cursor_model_thinking: str
     
     @classmethod
     def from_env(cls) -> "Config":
@@ -53,6 +54,6 @@ class Config:
             repo_owner=repo_owner,
             github_token=github_token,
             fork_prefix=os.environ.get("PRBOT_FORK_PREFIX", ""),
-            cursor_model_default=os.environ.get("PRBOT_CURSOR_MODEL", "sonnet-4.5"),
-            cursor_model_thinking=os.environ.get("PRBOT_CURSOR_THINKING_MODEL", "opus-4.5-thinking"),
+            cursor_model_default=os.environ.get("PRBOT_CURSOR_MODEL") or DEFAULT_CURSOR_MODEL,
+            cursor_model_thinking=os.environ.get("PRBOT_CURSOR_THINKING_MODEL") or DEFAULT_CURSOR_THINKING_MODEL,
         )

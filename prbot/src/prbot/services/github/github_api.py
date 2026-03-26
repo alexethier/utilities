@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from github import Github, UnknownObjectException
 
+IGNORED_CHECK_APPS = {"graphite-app", "graphite"}
+
 
 @dataclass
 class PRComment:
@@ -124,6 +126,7 @@ class GitHubApi:
         passed = 0
         failed = 0
         pending = 0
+        ignored = 0
         
         # Count statuses
         for status in statuses.statuses:
@@ -134,16 +137,19 @@ class GitHubApi:
             else:
                 pending += 1
         
-        # Count check runs
+        # Count check runs (skip non-CI apps like Graphite)
         for check in check_runs:
-            if check.conclusion == "success":
+            app_slug = getattr(check.app, "slug", "") or ""
+            if app_slug in IGNORED_CHECK_APPS:
+                ignored += 1
+            elif check.conclusion == "success":
                 passed += 1
             elif check.conclusion in ("failure", "cancelled", "timed_out"):
                 failed += 1
             elif check.status != "completed":
                 pending += 1
         
-        return {"passed": passed, "failed": failed, "pending": pending}
+        return {"passed": passed, "failed": failed, "pending": pending, "ignored": ignored}
     
     # Comment operations
     
