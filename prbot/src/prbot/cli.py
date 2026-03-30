@@ -87,11 +87,10 @@ def run_fix_conflict(args: argparse.Namespace, config: Config) -> None:
     fixer.fix_conflicts(args.branch)
 
 
-def run_fork_sync(args: argparse.Namespace, config: Config) -> None:
-    """Run the fork_sync action."""
+def _create_fork_syncer(args: argparse.Namespace, config: Config):
+    """Create a ForkSyncer instance with parsed repo args."""
     from prbot.actions.fork_syncer.fork_syncer import ForkSyncer
     
-    # Parse source repo
     if "/" not in args.repo:
         print(f"❌ Invalid repo format: {args.repo}")
         print("   Expected: org/repo (e.g., myorg/myrepo)")
@@ -99,18 +98,28 @@ def run_fork_sync(args: argparse.Namespace, config: Config) -> None:
     
     source_owner, source_repo = args.repo.split("/", 1)
     
-    # Target is derived: PRBOT_REPO_OWNER / PRBOT_FORK_PREFIX + source_repo_name
     target_owner = config.repo_owner
     target_repo = f"{config.fork_prefix}{source_repo}"
     
     github = GitHubApi(config.github_token)
     
-    # Clone/open repo in workdir
     repo_path = config.workdir / target_owner / target_repo
     git = GitRepo.ensure(f"https://github.com/{target_owner}/{target_repo}.git", repo_path)
     
     syncer = ForkSyncer(git, github, config)
-    syncer.sync(source_owner, source_repo, args.branch)
+    return syncer, source_owner, source_repo
+
+
+def run_sync_branch(args: argparse.Namespace, config: Config) -> None:
+    """Sync a single branch from source repo to fork."""
+    syncer, source_owner, source_repo = _create_fork_syncer(args, config)
+    syncer.sync_branch_from_source(source_owner, source_repo, args.branch)
+
+
+def run_sync_prs(args: argparse.Namespace, config: Config) -> None:
+    """Sync all open PRs from source repo to fork."""
+    syncer, source_owner, source_repo = _create_fork_syncer(args, config)
+    syncer.sync_prs_from_source(source_owner, source_repo)
 
 
 def main() -> None:
@@ -139,10 +148,14 @@ def main() -> None:
     conflict_parser.add_argument("-r", "--repo", required=True, help="Target repo (e.g., org/repo)")
     conflict_parser.add_argument("-b", "--branch", required=True, help="PR branch to fix")
     
-    # fork_sync
-    fork_sync_parser = subparsers.add_parser("fork_sync", help="Sync branches/PRs from source repo to your fork")
-    fork_sync_parser.add_argument("-r", "--repo", required=True, help="Source repo to sync from (e.g., org/repo)")
-    fork_sync_parser.add_argument("-b", "--branch", help="Only sync this branch (otherwise syncs all your PRs)")
+    # sync_branch
+    sync_branch_parser = subparsers.add_parser("sync_branch", help="Sync a single branch from source repo to your fork")
+    sync_branch_parser.add_argument("-r", "--repo", required=True, help="Source repo to sync from (e.g., org/repo)")
+    sync_branch_parser.add_argument("-b", "--branch", required=True, help="Branch to sync")
+    
+    # sync_prs
+    sync_prs_parser = subparsers.add_parser("sync_prs", help="Sync all your open PRs from source repo to your fork")
+    sync_prs_parser.add_argument("-r", "--repo", required=True, help="Source repo to sync from (e.g., org/repo)")
     
     args = parser.parse_args()
     
@@ -160,7 +173,8 @@ def main() -> None:
         "review": run_review,
         "test": run_test,
         "fix_conflict": run_fix_conflict,
-        "fork_sync": run_fork_sync,
+        "sync_branch": run_sync_branch,
+        "sync_prs": run_sync_prs,
     }
     
     action_fn = actions[args.action]

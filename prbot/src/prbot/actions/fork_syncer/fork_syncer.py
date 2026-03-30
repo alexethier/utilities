@@ -21,36 +21,28 @@ class ForkSyncer:
         )
         self.comment_syncer = CommentSyncer(github)
     
-    def sync(self, source_owner: str, source_repo: str, branch: str | None = None) -> None:
-        """Main entry point - sync branches and/or PRs from source to target.
-        
-        Args:
-            source_owner: Owner of the source repo (e.g., "apache")
-            source_repo: Name of the source repo (e.g., "kafka")
-            branch: If specified, only sync this branch. Otherwise sync all open PRs.
-        """
+    def _print_header(self, source_owner: str, source_repo: str) -> None:
+        """Print sync header."""
         print()
         print("━" * 60)
         print(f"🔄 Syncing from {source_owner}/{source_repo}")
         print(f"   Target: {self.target_owner}/{self.target_repo}")
         print("━" * 60)
-        
-        # Add source as remote
-        remote_name = self._add_source_remote(source_owner, source_repo)
-        
-        if branch:
-            # Sync single branch
-            self.sync_branch(remote_name, branch)
-        else:
-            # Sync all open PRs
-            self.sync_prs(source_owner, source_repo, remote_name)
     
-    def sync_branch(self, remote_name: str, branch: str) -> None:
-        """Sync a single branch from source to target.
-        
-        1. Fetch branch from source remote
-        2. Push to origin (target repo)
-        """
+    def sync_branch_from_source(self, source_owner: str, source_repo: str, branch: str) -> None:
+        """Sync a single branch from source repo to target."""
+        self._print_header(source_owner, source_repo)
+        remote_name = self._add_source_remote(source_owner, source_repo)
+        self._sync_branch(remote_name, branch)
+    
+    def sync_prs_from_source(self, source_owner: str, source_repo: str) -> None:
+        """Sync all open PRs from source repo to target."""
+        self._print_header(source_owner, source_repo)
+        remote_name = self._add_source_remote(source_owner, source_repo)
+        self._sync_prs(source_owner, source_repo, remote_name)
+    
+    def _sync_branch(self, remote_name: str, branch: str) -> None:
+        """Sync a single branch from source to target."""
         print(f"\n📥 Syncing branch: {branch}")
         
         # Fetch from source
@@ -65,14 +57,8 @@ class ForkSyncer:
         
         print(f"   ✅ Branch {branch} synced")
     
-    def sync_prs(self, source_owner: str, source_repo: str, remote_name: str) -> None:
-        """Sync open PRs authored by current user from source to target.
-        
-        For each open PR in source by current user:
-        1. Sync the head branch
-        2. Sync the base branch
-        3. Create PR in target repo (if not exists)
-        """
+    def _sync_prs(self, source_owner: str, source_repo: str, remote_name: str) -> None:
+        """Sync open PRs authored by current user from source to target."""
         current_user = self.github.get_current_user()
         print(f"\n🔍 Finding open PRs by {current_user} in {source_owner}/{source_repo}...")
         
@@ -162,7 +148,8 @@ class ForkSyncer:
                     head=pr.head_branch,
                     base=pr.base_branch,
                     title=f"[Sync] {pr.title}",
-                    body=f"Synced from {pr.repo_owner}/{pr.repo_name} PR #{pr.number}\n\nOriginal: https://github.com/{pr.repo_owner}/{pr.repo_name}/pull/{pr.number}",
+                    # URL in backticks to prevent GitHub cross-reference on source PR
+                    body=f"Synced from {pr.repo_owner}/{pr.repo_name} PR #{pr.number}\n\nOriginal: `https://github.com/{pr.repo_owner}/{pr.repo_name}/pull/{pr.number}`",
                 )
                 print(f"   ✅ Created PR #{new_pr}")
                 target_pr_number = new_pr
