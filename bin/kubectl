@@ -25,8 +25,12 @@ get_original_command() {
     echo "$cmd_path"
 }
 
-# Get the original kubectl command
-KUBECTL_CMD=$(get_original_command "kubectl")
+# Use custom base command if set, otherwise discover the original kubectl
+if [ -n "$KUBECTL_BASE_CMD" ]; then
+    KUBECTL_CMD="$KUBECTL_BASE_CMD"
+else
+    KUBECTL_CMD=$(get_original_command "kubectl")
+fi
 
 # Help function
 show_help() {
@@ -47,6 +51,9 @@ Enhanced Commands:
 Options:
     -v, --verbose                        - Enable verbose mode
     -h, --help                           - Show this help
+
+Environment:
+    KUBECTL_BASE_CMD                     - Custom base command (e.g., "oflowctl spcs k -c my-cluster")
 
 Examples:
     kubectl search pods data-plane-agent
