@@ -129,13 +129,12 @@ class BuildFixer:
         
         self.validate_build_command(cmd)
         
-        retries = 0
-        while retries < MAX_RETRIES:
-            print(f"\n🚀 Running build (attempt {retries + 1}/{MAX_RETRIES})...")
+        fixes = 0
+        while True:
+            print(f"\n🚀 Running build (attempt {fixes + 1})...")
             
             output_file = self._workdir / f"{stage.value}_output.log"
             
-            # Run build
             result = subprocess.run(
                 cmd,
                 shell=True,
@@ -157,11 +156,13 @@ class BuildFixer:
             for line in lines[-20:]:
                 print(f"  {line}")
             
-            # Ask AI to fix
+            if fixes >= MAX_RETRIES:
+                print(f"❌ {stage.value.title()} failed after {fixes} fix(es)")
+                return False
+            
             print("\n🤖 Asking AI to fix...")
             self.fix_build_errors(output_file)
             
-            # Commit any changes
             self.git.add_all()
             if self.git.has_staged_changes():
                 self.git.commit(f"[BUILD FIX - {stage.value.title()}] Fix build errors")
@@ -169,10 +170,7 @@ class BuildFixer:
             else:
                 print("ℹ️ No changes made by AI")
             
-            retries += 1
-        
-        print(f"❌ {stage.value.title()} failed after {MAX_RETRIES} attempts")
-        return False
+            fixes += 1
     
     def get_build_command(self, stage: BuildStage) -> str:
         """Ask AI for the appropriate build command."""
