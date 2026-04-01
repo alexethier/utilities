@@ -85,7 +85,7 @@ find_namespace() {
     local pattern="$2"
     
     # Get all matching results
-    local all_matches=$($KUBECTL_CMD get "$kind" --all-namespaces | grep -i "$pattern" 2>/dev/null | awk '{print $1 " " $2}')
+    local all_matches=$($KUBECTL_CMD get "$kind" --all-namespaces | awk -v pat="$pattern" 'tolower($2) ~ tolower(pat) {print $1 " " $2}')
     
     # Count matches
     local match_count=$(echo "$all_matches" | grep -v '^$' | wc -l | tr -d ' ')
