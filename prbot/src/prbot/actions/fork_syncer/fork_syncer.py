@@ -35,11 +35,11 @@ class ForkSyncer:
         remote_name = self._add_source_remote(source_owner, source_repo)
         self._sync_branch(remote_name, branch)
     
-    def sync_prs_from_source(self, source_owner: str, source_repo: str) -> None:
-        """Sync all open PRs from source repo to target."""
+    def sync_prs_from_source(self, source_owner: str, source_repo: str, branch: str | None = None) -> None:
+        """Sync open PRs from source repo to target. Optionally filter by branch."""
         self._print_header(source_owner, source_repo)
         remote_name = self._add_source_remote(source_owner, source_repo)
-        self._sync_prs(source_owner, source_repo, remote_name)
+        self._sync_prs(source_owner, source_repo, remote_name, branch=branch)
     
     def _sync_branch(self, remote_name: str, branch: str) -> None:
         """Sync a single branch from source to target."""
@@ -57,16 +57,21 @@ class ForkSyncer:
         
         print(f"   ✅ Branch {branch} synced")
     
-    def _sync_prs(self, source_owner: str, source_repo: str, remote_name: str) -> None:
+    def _sync_prs(self, source_owner: str, source_repo: str, remote_name: str, branch: str | None = None) -> None:
         """Sync open PRs authored by current user from source to target."""
         current_user = self.github.get_current_user()
         print(f"\n🔍 Finding open PRs by {current_user} in {source_owner}/{source_repo}...")
         
-        # Get open PRs from source (filtered by current user)
         source_prs = self._get_source_prs(source_owner, source_repo, current_user)
         
+        if branch:
+            source_prs = [pr for pr in source_prs if pr.head_branch == branch]
+        
         if not source_prs:
-            print("   No open PRs found")
+            if branch:
+                print(f"   No open PR found for branch '{branch}'")
+            else:
+                print("   No open PRs found")
             return
         
         print(f"   Found {len(source_prs)} open PR(s)")

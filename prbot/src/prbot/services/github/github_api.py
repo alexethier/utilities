@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from github import Github, UnknownObjectException
 
 IGNORED_CHECK_APPS = {"graphite-app", "graphite"}
+IGNORED_STATUS_PREFIXES = {"security/snyk", "license/snyk"}
 
 
 @dataclass
@@ -128,9 +129,12 @@ class GitHubApi:
         pending = 0
         ignored = 0
         
-        # Count statuses
+        # Count statuses (skip non-CI like Snyk)
         for status in statuses.statuses:
-            if status.state == "success":
+            context = getattr(status, "context", "") or ""
+            if any(context.startswith(prefix) for prefix in IGNORED_STATUS_PREFIXES):
+                ignored += 1
+            elif status.state == "success":
                 passed += 1
             elif status.state == "failure" or status.state == "error":
                 failed += 1

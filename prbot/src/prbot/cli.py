@@ -117,9 +117,9 @@ def run_sync_branch(args: argparse.Namespace, config: Config) -> None:
 
 
 def run_sync_prs(args: argparse.Namespace, config: Config) -> None:
-    """Sync all open PRs from source repo to fork."""
+    """Sync open PRs from source repo to fork. Optionally filter by branch."""
     syncer, source_owner, source_repo = _create_fork_syncer(args, config)
-    syncer.sync_prs_from_source(source_owner, source_repo)
+    syncer.sync_prs_from_source(source_owner, source_repo, branch=args.branch)
 
 
 def main() -> None:
@@ -154,8 +154,9 @@ def main() -> None:
     sync_branch_parser.add_argument("-b", "--branch", required=True, help="Branch to sync")
     
     # sync_prs
-    sync_prs_parser = subparsers.add_parser("sync_prs", help="Sync all your open PRs from source repo to your fork")
+    sync_prs_parser = subparsers.add_parser("sync_prs", help="Sync your open PRs from source repo to your fork")
     sync_prs_parser.add_argument("-r", "--repo", required=True, help="Source repo to sync from (e.g., org/repo)")
+    sync_prs_parser.add_argument("-b", "--branch", help="Only sync the PR for this branch")
     
     args = parser.parse_args()
     
