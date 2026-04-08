@@ -2,19 +2,17 @@
 
 # This script allows simple modification of csv files
 
-import json
+import csv
 import sys
 import argparse
 import os
+import io
 
-def parse_csv_line(line):
-  return line.split(',')
 
-def process_header(line, add_args, delete_column_names):
+def process_header(headers, add_args, delete_column_names):
   new_headers_set = set()
   delete_indicies = []
 
-  headers = parse_csv_line(line)
   headers_set = set(headers)
   if delete_column_names:
     for delete_column_name in delete_column_names:
@@ -27,7 +25,7 @@ def process_header(line, add_args, delete_column_names):
         raise Exception(f"No header for delete column: {delete_column_name}" + os.linesep)
   delete_indicies.sort(reverse = True)
 
-  output_headers = headers
+  output_headers = list(headers)
 
   # Handle delete columns
   for delete_index in delete_indicies:
@@ -44,8 +42,9 @@ def process_header(line, add_args, delete_column_names):
 
   return headers, output_headers, delete_indicies
 
-def process_row(line, add_args, delete_indicies):
-  output_vals = parse_csv_line(line)
+
+def process_row(vals, add_args, delete_indicies):
+  output_vals = list(vals)
 
   # Handle delete columns
   for delete_index in delete_indicies:
@@ -56,6 +55,10 @@ def process_row(line, add_args, delete_indicies):
     output_vals.append(add_arg[1])
 
   return output_vals
+
+
+def write_row(writer, row):
+  writer.writerow(row)
 
 
 def main():
@@ -82,18 +85,19 @@ def main():
   if args["new_value"] and not args["update"]:
     parser.error("-u/--update must be specified when using -n/--new-value")
 
+  reader = csv.reader(sys.stdin)
+  writer = csv.writer(sys.stdout, lineterminator='\n')
+
   first = True
   headers = []
   delete_indicies = []
   update_column_index = None
 
-  for raw_line in sys.stdin:
-    line = raw_line.rstrip('\n')
-
+  for row in reader:
     # Process header
     if first:
       first = False
-      headers, output_headers, delete_indicies = process_header(line, add_args, delete_column_names)
+      headers, output_headers, delete_indicies = process_header(row, add_args, delete_column_names)
 
       if args["print"]:
         sys.stderr.write(", ".join(headers) + os.linesep)
@@ -108,16 +112,15 @@ def main():
         if update_column_index is None:
           raise Exception(f"No header for update column: {args['update']}" + os.linesep)
 
-      print(",".join(output_headers))
+      write_row(writer, output_headers)
 
     elif add_args or delete_column_names: 
-      output_vals = process_row(line, add_args, delete_indicies)
-      print(",".join(output_vals))
+      output_vals = process_row(row, add_args, delete_indicies)
+      write_row(writer, output_vals)
     elif args["update"]:
-      vals = parse_csv_line(line)
-      vals[update_column_index] = args["new_value"]
-      print(",".join(vals))
+      row[update_column_index] = args["new_value"]
+      write_row(writer, row)
     else:
-      print(line)
+      write_row(writer, row)
 
 main()
