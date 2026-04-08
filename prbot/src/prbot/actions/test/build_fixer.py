@@ -208,10 +208,6 @@ Examples: "mvn package", "gradle build", "npm run build && npm test"
             if re.search(rf"\b{blocked}\b", cmd):
                 raise ValueError(f"Build command contains blocked command: {blocked}")
         
-        # Check for -f flag
-        if re.search(r"-f\b", cmd):
-            raise ValueError("Build command contains -f flag")
-        
         # Must contain allowed tool
         has_tool = any(re.search(rf"\b{tool}\b", cmd) for tool in ALLOWED_TOOLS)
         if not has_tool:
