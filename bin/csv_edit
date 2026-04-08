@@ -86,7 +86,7 @@ def main():
     parser.error("-u/--update must be specified when using -n/--new-value")
 
   reader = csv.reader(sys.stdin)
-  writer = csv.writer(sys.stdout, lineterminator='\n')
+  writer = csv.writer(sys.stdout, lineterminator='\n', quoting=csv.QUOTE_ALL)
 
   first = True
   headers = []
