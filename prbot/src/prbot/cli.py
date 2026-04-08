@@ -93,6 +93,19 @@ def run_sync_prs(org: str, repo: str, args: argparse.Namespace, config: Config) 
     syncer.sync_prs_from_source(org, repo, branch=args.branch)
 
 
+def run_jira(org: str, repo: str, args: argparse.Namespace, config: Config) -> None:
+    """Jira-driven implementation on target fork (sync base from source, then AI + PR)."""
+    from prbot.actions.jira.jira_runner import run_jira_flow
+
+    run_jira_flow(
+        source_org=org,
+        source_repo=repo,
+        jira_ticket=args.jira_ticket,
+        base=args.base,
+        config=config,
+    )
+
+
 def main() -> None:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -104,11 +117,15 @@ def main() -> None:
     
     subparsers = parser.add_subparsers(dest="action", required=True)
     
-    # Shared repo args: either -r org/repo OR -o org -n name
+    # Shared repo args: prefer -o / -n; -r org/repo still works but is deprecated
     def add_repo_args(p):
-        p.add_argument("-r", "--repo", help="Repo as org/repo (e.g., snowflake-eng/openflow-core)")
-        p.add_argument("-o", "--org", help="Repo org/owner (e.g., snowflake-eng)")
-        p.add_argument("-n", "--name", help="Repo name (e.g., openflow-core)")
+        p.add_argument(
+            "-r",
+            "--repo",
+            help="(Deprecated) Source repo as org/repo — prefer -o and -n instead",
+        )
+        p.add_argument("-o", "--org", help="Source repo org/owner (preferred, e.g. snowflake-eng)")
+        p.add_argument("-n", "--name", help="Source repo name (preferred, e.g. openflow-core)")
     
     # review
     review_parser = subparsers.add_parser("review", help="Process PR review comments")
@@ -135,29 +152,55 @@ def main() -> None:
     add_repo_args(sync_prs_parser)
     sync_prs_parser.add_argument("-b", "--branch", help="Only sync the PR for this branch")
     
+    # jira
+    jira_parser = subparsers.add_parser(
+        "jira",
+        help="Sync base from source to fork, fetch Jira issue, implement with Cursor, open PR on fork",
+    )
+    add_repo_args(jira_parser)
+    jira_parser.add_argument(
+        "-j",
+        "--jira",
+        required=True,
+        dest="jira_ticket",
+        metavar="KEY",
+        help="Jira issue key (e.g. SNOW-3053981)",
+    )
+    jira_parser.add_argument(
+        "--base",
+        default="main",
+        help="Branch to sync from source and PR target (default: main)",
+    )
+    
     args = parser.parse_args()
     
-    # Resolve org and repo from either -r org/repo or -o org -n name
+    # Resolve org and repo: prefer -o / -n; -r org/repo is deprecated but supported
     raw_repo = getattr(args, "repo", None)
     raw_org = getattr(args, "org", None)
     raw_name = getattr(args, "name", None)
     
     if raw_repo and (raw_org or raw_name):
-        print("❌ Use either -r org/repo or -o org -n name, not both")
+        print("❌ Use either -o ORG -n NAME (preferred) or -r org/repo, not both")
         sys.exit(1)
     elif raw_repo:
         if "/" not in raw_repo:
             print(f"❌ Invalid -r format: {raw_repo}")
-            print("   Expected: org/repo (e.g., snowflake-eng/openflow-core)")
+            print("   Prefer: -o ORG -n NAME")
+            print("   Or deprecated -r: org/repo (e.g., snowflake-eng/openflow-core)")
             sys.exit(1)
         org, repo = raw_repo.split("/", 1)
+        print(
+            "⚠️  -r/--repo is deprecated; use -o and -n instead "
+            f"(e.g. -o {org} -n {repo}).",
+            file=sys.stderr,
+        )
     elif raw_org and raw_name:
         org, repo = raw_org, raw_name
     elif raw_org or raw_name:
-        print("❌ Both -o and -n are required when not using -r")
+        print("❌ Both -o and -n are required (preferred over -r org/repo)")
         sys.exit(1)
     else:
-        print("❌ Repo required: use -r org/repo or -o org -n name")
+        print("❌ Repo required: use -o ORG -n NAME (preferred), or -r org/repo (deprecated)")
         sys.exit(1)
     
     try:
@@ -176,6 +219,7 @@ def main() -> None:
         "fix_conflict": run_fix_conflict,
         "sync_branch": run_sync_branch,
         "sync_prs": run_sync_prs,
+        "jira": run_jira,
     }
     
     action_fn = actions[args.action]

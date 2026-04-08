@@ -42,12 +42,18 @@ class CursorRunner:
         )
         return result.returncode
     
-    def run_isolated(self, prompt: str, use_thinking: bool = False) -> int:
+    def run_isolated(
+        self,
+        prompt: str,
+        use_thinking: bool = False,
+        cwd: Path | None = None,
+    ) -> int:
         """Run cursor in isolated subprocess with clean environment.
         
         Args:
             prompt: The prompt to send to cursor.
             use_thinking: If True, use the thinking model.
+            cwd: If set, working directory for the cursor process (e.g. git repo root).
             
         Returns:
             Exit code from cursor process.
@@ -84,10 +90,16 @@ echo $? > "{exit_file}"
             print(f"🤖 Running cursor (model: {model})")
             print(f"📜 Runner dir: {tmpdir}")
             
+            popen_kw: dict = {
+                "env": env,
+                "stdin": subprocess.DEVNULL,
+            }
+            if cwd is not None:
+                popen_kw["cwd"] = str(cwd)
+
             process = subprocess.Popen(
                 ["/bin/bash", str(runner_script)],
-                env=env,
-                stdin=subprocess.DEVNULL,
+                **popen_kw,
             )
             
             process.wait()
