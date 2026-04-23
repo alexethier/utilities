@@ -345,6 +345,13 @@ main() {
         $KUBECTL_CMD "$command" "$kind" "$@"
         exit 0
     fi
+
+    # Namespace is cluster-scoped; discovery uses the wrong table shape vs namespaced kinds.
+    # Pass through literal delete namespace <name> [...] to real kubectl.
+    if [[ "$command" == "delete" ]] && [[ "$kind" =~ ^namespaces?$ ]] && [[ -n "$pattern" ]] && [[ ! "$pattern" =~ ^- ]]; then
+        $KUBECTL_CMD delete "$kind" "$pattern" "$@"
+        exit $?
+    fi
     
     # Execute command
     case $command in
