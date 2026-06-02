@@ -102,10 +102,12 @@ rebase_self() {
 
 pull_branch() {
   TARGET_BRANCH="$1"
-  current_branch=`$GIT_PATH branch --show-current`
-  $GIT_PATH checkout $TARGET_BRANCH
-  $GIT_PATH pull
-  $GIT_PATH checkout $current_branch
+  current_branch=$($GIT_PATH branch --show-current)
+  $GIT_PATH checkout "$TARGET_BRANCH"
+  # Fetch only the target branch from origin, then update local branch from it.
+  $GIT_PATH fetch origin "$TARGET_BRANCH"
+  $GIT_PATH rebase "origin/$TARGET_BRANCH"
+  $GIT_PATH checkout "$current_branch"
 }
 
 dev() {
@@ -140,6 +142,31 @@ clear() {
   echo "$versions_to_remove" | sed 's/^/aetmp/' | while read branch_name; do
     $GIT_PATH branch -D "$branch_name"
   done
+}
+
+# Guard: block AI agents from pushing to non-draft PRs
+ai_push_guard() {
+    if [ "$CURSOR_AGENT" != "1" ]; then
+        return 0
+    fi
+
+    local branch=$($GIT_PATH branch --show-current)
+    local is_draft=$(gh pr view "$branch" --json isDraft --jq '.isDraft' 2>/dev/null)
+    if [ "$is_draft" = "false" ]; then
+        echo "If you are AI, then do not push to the repo. Prompt the user if you may use git_ai_bypass push" >&2
+        exit 1
+    fi
+}
+
+run_git_hook() {
+    if [ -n "$GIT_COMMIT_HOOK" ]; then
+        if [ ! -f "$GIT_COMMIT_HOOK" ]; then
+            echo "Error: GIT_COMMIT_HOOK file not found: $GIT_COMMIT_HOOK" >&2
+            exit 1
+        fi
+        echo "Running commit hook: $GIT_COMMIT_HOOK"
+        bash "$GIT_COMMIT_HOOK"
+    fi
 }
 
 # Action handler methods
@@ -199,12 +226,8 @@ handle_rebasem() {
 handle_pushm() {
     handle_rebasem    
     local current_branch=$($GIT_PATH branch --show-current)
+    ai_push_guard push -u origin "$current_branch" --force
     $GIT_PATH push -u origin "$current_branch" --force
-}
-
-handle_owners() {
-  $GIT_PATH remote prune origin
-  print_branch_owners
 }
 
 handle_commit() {
@@ -236,20 +259,29 @@ handle_help() {
     echo "  -s, --skip              - (for delete) Skip saving backup before deletion"
 }
 
-# Action dispatch
 case "$ACTION" in
     save)           handle_save ;;
     delete)         handle_delete ;;
     rebase)         handle_rebase ;;
     rebasem)        handle_rebasem ;;
     pushm)          handle_pushm ;;
-    owner)          handle_owners ;;
+    owner)          print_branch_owners ;;
     dev)            dev ;;
     clear)          clear "${CUSTOM_ARGS[0]}" ;;
-    commit)         handle_commit ;;
+    commit)
+        run_git_hook
+        handle_commit
+        ;;
     retry)          handle_retry ;;
     help)           handle_help ;;
-    passthrough)    $GIT_PATH -c gpg.format=ssh "$@" ;;
+    passthrough)
+        if [ "$1" = "commit" ]; then
+            run_git_hook
+        fi
+        if [ "$1" = "push" ]; then
+            ai_push_guard "$@"
+        fi
+        $GIT_PATH -c gpg.format=ssh "$@"
+        ;;
     *)              echo "Error: Unknown action '$ACTION'" >&2; exit 1 ;;
 esac
-

@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR=$(dirname "$0")
+CURSOR_AGENT="" exec "$SCRIPT_DIR/git" "$@"
